@@ -65,7 +65,13 @@ export async function getReservation(code){
 }
 export async function listReservations(){
   if(!supabaseConfigured) return getDemo().reservations
-  const {data,error}=await supabase.from('reservations').select('*, restaurant_tables(code,seats)').order('created_at',{ascending:false}); noerr(error); return data||[]
+  const {data,error}=await supabase.from('reservations').select('*, restaurant_tables(code,seats), table_sessions(token,status,created_at)').order('created_at',{ascending:false}); noerr(error)
+  return (data||[]).map(r=>({
+    ...r,
+    table_code:r.restaurant_tables?.code,
+    session_token:[...(r.table_sessions||[])].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0]?.token||null,
+    session_status:[...(r.table_sessions||[])].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0]?.status||null,
+  }))
 }
 export async function confirmReservation(reservationId,tableId){
   if(!supabaseConfigured) return mutate(db=>{
