@@ -313,7 +313,7 @@ function Dashboard(){
   const maxH=Math.max(1,...Object.values(hour))
   const cards=[
     ['฿','ยอดขายวันนี้',money(todaySales)],['👥','ลูกค้าวันนี้',todayCustomers],
-    ['🟢','โต๊ะว่าง',tables.filter(x=>x.status==='available').length],['🍲','โต๊ะใช้งาน',tables.filter(x=>x.status==='occupied').length],
+    ['🟢','โต๊ะว่าง',tables.filter(x=>x.status==='available').length],['🍲','โต๊ะใช้งาน',tables.filter(x=>['occupied','service','billing'].includes(x.status)).length],
     ['◷','จองรอยืนยัน',res.filter(x=>x.status==='pending').length],['🔥','ออเดอร์รอครัว',orders.filter(x=>x.status==='pending').length],
     ['🔔','เรียกพนักงาน',calls.filter(x=>x.status==='pending').length],['💳','รอเช็คบิล',bills.filter(x=>x.status==='pending').length],['★','รีวิวเฉลี่ย',avg],
   ]
