@@ -83,13 +83,75 @@ alter table public.promotions enable row level security;
 alter table public.audit_logs enable row level security;
 alter table public.chat_logs enable row level security;
 
+
+create or replace function public.has_role(p_roles text[])
+returns boolean
+language sql stable security definer set search_path=public
+as $
+  select exists(
+    select 1 from public.profiles
+    where id=auth.uid() and is_active=true and role=any(p_roles)
+  );
+$;
+
+
+
+-- Role-specific production policies
+drop policy if exists settings_admin_update on public.shop_settings;
+create policy settings_admin_update on public.shop_settings for update to authenticated
+using(public.has_role(array['owner','manager'])) with check(public.has_role(array['owner','manager']));
+
+drop policy if exists tables_admin_all on public.restaurant_tables;
+create policy tables_admin_all on public.restaurant_tables for all to authenticated
+using(public.has_role(array['owner','manager','cashier','staff']))
+with check(public.has_role(array['owner','manager','cashier','staff']));
+
+drop policy if exists reservations_admin_all on public.reservations;
+create policy reservations_admin_all on public.reservations for all to authenticated
+using(public.has_role(array['owner','manager','cashier','staff']))
+with check(public.has_role(array['owner','manager','cashier','staff']));
+
+drop policy if exists sessions_admin_read on public.table_sessions;
+create policy sessions_admin_read on public.table_sessions for select to authenticated
+using(public.has_role(array['owner','manager','cashier','kitchen','staff']));
+
+drop policy if exists orders_admin_all on public.food_orders;
+create policy orders_admin_all on public.food_orders for all to authenticated
+using(public.has_role(array['owner','manager','kitchen','staff']))
+with check(public.has_role(array['owner','manager','kitchen','staff']));
+
+drop policy if exists order_items_admin_read on public.food_order_items;
+create policy order_items_admin_read on public.food_order_items for select to authenticated
+using(public.has_role(array['owner','manager','cashier','kitchen','staff']));
+
+drop policy if exists calls_admin_all on public.service_calls;
+create policy calls_admin_all on public.service_calls for all to authenticated
+using(public.has_role(array['owner','manager','kitchen','staff']))
+with check(public.has_role(array['owner','manager','kitchen','staff']));
+
+drop policy if exists bills_admin_all on public.bills;
+create policy bills_admin_all on public.bills for all to authenticated
+using(public.has_role(array['owner','manager','cashier']))
+with check(public.has_role(array['owner','manager','cashier']));
+
+drop policy if exists reviews_admin_read on public.reviews;
+create policy reviews_admin_read on public.reviews for select to authenticated
+using(public.has_role(array['owner','manager']));
+
+drop policy if exists profiles_admin_read on public.profiles;
+create policy profiles_admin_read on public.profiles for select to authenticated
+using(id=auth.uid() or public.has_role(array['owner']));
+drop policy if exists profiles_owner_update on public.profiles;
+create policy profiles_owner_update on public.profiles for update to authenticated
+using(public.has_role(array['owner'])) with check(public.has_role(array['owner']));
+
 drop policy if exists menu_categories_admin_all on public.menu_categories;
 create policy menu_categories_admin_all on public.menu_categories
-for all to authenticated using(public.is_admin()) with check(public.is_admin());
+for all to authenticated using(public.has_role(array['owner','manager'])) with check(public.has_role(array['owner','manager']));
 
 drop policy if exists menu_items_admin_all on public.menu_items;
 create policy menu_items_admin_all on public.menu_items
-for all to authenticated using(public.is_admin()) with check(public.is_admin());
+for all to authenticated using(public.has_role(array['owner','manager'])) with check(public.has_role(array['owner','manager']));
 
 drop policy if exists promotions_public_read on public.promotions;
 create policy promotions_public_read on public.promotions
@@ -98,11 +160,11 @@ using(is_active=true and (start_at is null or start_at<=now()) and (end_at is nu
 
 drop policy if exists promotions_admin_all on public.promotions;
 create policy promotions_admin_all on public.promotions
-for all to authenticated using(public.is_admin()) with check(public.is_admin());
+for all to authenticated using(public.has_role(array['owner','manager'])) with check(public.has_role(array['owner','manager']));
 
 drop policy if exists audit_admin_read on public.audit_logs;
 create policy audit_admin_read on public.audit_logs
-for select to authenticated using(public.is_owner());
+for select to authenticated using(public.has_role(array['owner']));
 
 drop policy if exists chat_admin_read on public.chat_logs;
 create policy chat_admin_read on public.chat_logs
@@ -141,7 +203,7 @@ declare
   v_session public.table_sessions%rowtype;
   v_guest integer := coalesce(p_adult_count,0)+coalesce(p_child_count,0)+coalesce(p_free_child_count,0);
 begin
-  if not public.is_admin() then raise exception 'Unauthorized'; end if;
+  if not public.has_role(array['owner','manager','cashier','staff']) then raise exception 'Unauthorized'; end if;
   if v_guest < 1 or p_adult_count < 0 or p_child_count < 0 or p_free_child_count < 0 then raise exception 'จำนวนลูกค้าไม่ถูกต้อง'; end if;
 
   select * into t from public.restaurant_tables where id=p_table_id for update;
@@ -178,7 +240,7 @@ declare
   old_t public.restaurant_tables%rowtype;
   new_t public.restaurant_tables%rowtype;
 begin
-  if not public.is_admin() then raise exception 'Unauthorized'; end if;
+  if not public.has_role(array['owner','manager','cashier','staff']) then raise exception 'Unauthorized'; end if;
   select * into s from public.table_sessions where id=p_session_id and status in ('reserved','active','billing') for update;
   if not found then raise exception 'ไม่พบ Session ที่ย้ายได้'; end if;
   select * into old_t from public.restaurant_tables where id=s.table_id for update;
@@ -216,7 +278,7 @@ declare
   v_discount numeric(10,2) := greatest(0,coalesce(p_discount_amount,0));
   promo public.promotions%rowtype;
 begin
-  if not public.is_admin() then raise exception 'Unauthorized'; end if;
+  if not public.has_role(array['owner','manager','cashier']) then raise exception 'Unauthorized'; end if;
   if p_adult_count<0 or p_child_count<0 or p_free_child_count<0 then raise exception 'จำนวนลูกค้าไม่ถูกต้อง'; end if;
   if p_adult_count+p_child_count+p_free_child_count < 1 then raise exception 'ต้องมีลูกค้าอย่างน้อย 1 คน'; end if;
 
@@ -347,7 +409,7 @@ declare
   s public.table_sessions%rowtype;
   v_receipt text;
 begin
-  if not public.is_admin() then raise exception 'Unauthorized'; end if;
+  if not public.has_role(array['owner','manager','cashier']) then raise exception 'Unauthorized'; end if;
   if p_payment_method not in ('cash','promptpay','bank_transfer','card') then raise exception 'วิธีชำระเงินไม่ถูกต้อง'; end if;
   select * into b from public.bills where id=p_bill_id for update;
   if not found then raise exception 'ไม่พบบิล'; end if;
@@ -370,7 +432,7 @@ as $$
 declare
   v_count integer;
 begin
-  if not public.is_admin() then raise exception 'Unauthorized'; end if;
+  if not public.has_role(array['owner','manager','cashier']) then raise exception 'Unauthorized'; end if;
   with changed as (
     update public.reservations r
     set status='expired'
