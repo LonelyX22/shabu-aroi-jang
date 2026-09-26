@@ -1,4 +1,5 @@
-import { supabase, supabaseConfigured } from './supabase'
+import { createClient } from '@supabase/supabase-js'
+import { supabase, supabaseConfigured, supabaseUrl, supabaseAnonKey } from './supabase'
 import { MENU, SHOP, TABLES } from './constants'
 
 const KEY='shabu-aroi-jang-demo-v1'
@@ -118,7 +119,7 @@ export async function listSessionOrders(token){
 }
 export async function updateOrderStatus(id,status){
   if(!supabaseConfigured) return mutate(db=>{const o=db.orders.find(x=>x.id===id); if(o)o.status=status; return o})
-  const {data,error}=await supabase.from('food_orders').update({status}).eq('id',id).select().single(); noerr(error); return data
+  const {data,error}=await supabase.rpc('update_order_status_admin',{p_order_id:id,p_status:status}); noerr(error); return data
 }
 export async function createServiceCall(token,type,note=''){
   if(!supabaseConfigured) return mutate(db=>{
@@ -368,4 +369,131 @@ export async function registerStaffProfile(email,displayName,role){
 export async function listChatLogs(){
   if(!supabaseConfigured) return []
   const {data,error}=await supabase.from('chat_logs').select('*').order('created_at',{ascending:false}).limit(300); noerr(error); return data||[]
+}
+
+
+// ----- Final production helpers -----
+export async function createStaffAccount(email,password,displayName,role){
+  if(!supabaseConfigured) return {email,display_name:displayName,role,is_active:true}
+  const secondary=createClient(supabaseUrl,supabaseAnonKey,{
+    auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}
+  })
+  const {data,error}=await secondary.auth.signUp({
+    email:String(email||'').trim().toLowerCase(),
+    password,
+    options:{data:{display_name:displayName}}
+  })
+  noerr(error)
+  await registerStaffProfile(email,displayName,role)
+  return data.user
+}
+
+export async function reorderMenuItems(ids){
+  if(!supabaseConfigured) return
+  for(let i=0;i<ids.length;i++){
+    const {error}=await supabase.from('menu_items').update({sort_order:i+1}).eq('id',ids[i]); noerr(error)
+  }
+}
+export async function reorderCategories(ids){
+  if(!supabaseConfigured) return
+  for(let i=0;i<ids.length;i++){
+    const {error}=await supabase.from('menu_categories').update({sort_order:i+1}).eq('id',ids[i]); noerr(error)
+  }
+}
+export async function uploadPublicImage(bucket,file,prefix='img'){
+  if(!supabaseConfigured) return ''
+  if(!file?.type?.startsWith('image/')) throw new Error('กรุณาเลือกไฟล์รูปภาพ')
+  if(file.size>5*1024*1024) throw new Error('รูปต้องมีขนาดไม่เกิน 5 MB')
+  const ext=(file.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'')
+  const path=`${prefix}/${Date.now()}-${crypto.randomUUID().slice(0,8)}.${ext}`
+  const {error}=await supabase.storage.from(bucket).upload(path,file,{upsert:false,contentType:file.type}); noerr(error)
+  const {data}=supabase.storage.from(bucket).getPublicUrl(path)
+  return data.publicUrl
+}
+export async function uploadMenuImage(file){return uploadPublicImage('menu-images',file,'menu')}
+export async function uploadBrandLogo(file){return uploadPublicImage('branding',file,'logo')}
+
+export async function mergeSessionTable(sessionId,tableId){
+  const {data,error}=await supabase.rpc('merge_session_table',{p_session_id:sessionId,p_table_id:tableId}); noerr(error); return data
+}
+export async function detachSessionTable(sessionId,tableId){
+  const {data,error}=await supabase.rpc('detach_session_table',{p_session_id:sessionId,p_table_id:tableId}); noerr(error); return data
+}
+export async function updateSessionGuests(sessionId,adultCount,childCount,freeChildCount){
+  const {data,error}=await supabase.rpc('update_session_guests',{
+    p_session_id:sessionId,p_adult_count:Number(adultCount),p_child_count:Number(childCount),p_free_child_count:Number(freeChildCount)
+  }); noerr(error); return data
+}
+export async function regenerateSessionQr(sessionId){
+  const {data,error}=await supabase.rpc('regenerate_session_qr',{p_session_id:sessionId}); noerr(error); return data
+}
+
+export async function listSessionTableLinks(sessionId){
+  if(!supabaseConfigured) return []
+  const {data,error}=await supabase.from('table_session_tables').select('*, restaurant_tables(*)').eq('session_id',sessionId).order('is_primary',{ascending:false}); noerr(error)
+  return data||[]
+}
+
+export async function uploadPaymentSlip(token,file){
+  if(!supabaseConfigured) return {slip_status:'pending'}
+  if(!file?.type?.startsWith('image/')) throw new Error('กรุณาเลือกรูปสลิป')
+  if(file.size>6*1024*1024) throw new Error('สลิปต้องมีขนาดไม่เกิน 6 MB')
+  const ext=(file.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'')
+  const path=`${String(token).slice(0,8)}/${Date.now()}-${crypto.randomUUID().slice(0,8)}.${ext}`
+  const {error}=await supabase.storage.from('payment-slips').upload(path,file,{contentType:file.type}); noerr(error)
+  const {data,error:e2}=await supabase.rpc('submit_payment_slip',{p_token:token,p_path:path}); noerr(e2); return data
+}
+export async function getSlipSignedUrl(path){
+  if(!path) return null
+  const {data,error}=await supabase.storage.from('payment-slips').createSignedUrl(path,600); noerr(error); return data?.signedUrl||null
+}
+export async function reviewPaymentSlip(billId,status){
+  const {data,error}=await supabase.rpc('review_payment_slip',{p_bill_id:billId,p_status:status}); noerr(error); return data
+}
+
+export async function listNotifications(){
+  if(!supabaseConfigured) return []
+  const {data:{user}}=await supabase.auth.getUser()
+  if(!user) return []
+  const {data,error}=await supabase.from('notifications').select('*, notification_reads!left(user_id,read_at)').order('created_at',{ascending:false}).limit(100); noerr(error)
+  return (data||[]).map(n=>({...n,is_read:(n.notification_reads||[]).some(r=>r.user_id===user.id)}))
+}
+export async function markNotificationRead(id){
+  const {data:{user}}=await supabase.auth.getUser(); if(!user)return
+  const {error}=await supabase.from('notification_reads').upsert({notification_id:id,user_id:user.id},{onConflict:'notification_id,user_id'}); noerr(error)
+}
+export async function markAllNotificationsRead(ids){
+  for(const id of ids) await markNotificationRead(id)
+}
+export function subscribeNotifications(cb){
+  if(!supabaseConfigured) return ()=>{}
+  const ch=supabase.channel('admin-notifications')
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'notifications'},cb)
+    .subscribe()
+  return()=>supabase.removeChannel(ch)
+}
+
+export async function listKnowledgeBase(){
+  if(!supabaseConfigured) return []
+  const {data,error}=await supabase.from('knowledge_base').select('*').order('sort_order').order('created_at'); noerr(error); return data||[]
+}
+export async function createKnowledge(payload){
+  const {data,error}=await supabase.from('knowledge_base').insert(payload).select().single(); noerr(error); return data
+}
+export async function updateKnowledge(id,payload){
+  const {data,error}=await supabase.from('knowledge_base').update(payload).eq('id',id).select().single(); noerr(error); return data
+}
+export async function deleteKnowledge(id){
+  const {error}=await supabase.from('knowledge_base').delete().eq('id',id); noerr(error)
+}
+export async function updateReviewAdmin(id,payload){
+  const {data,error}=await supabase.from('reviews').update(payload).eq('id',id).select().single(); noerr(error); return data
+}
+
+export async function getAiContext(){
+  if(!supabaseConfigured) return {settings:null,menu:[],promotions:[],knowledge:[]}
+  const [settings,menu,promotions,knowledge]=await Promise.all([
+    getSettings().catch(()=>null),listMenu().catch(()=>[]),listPromotions().catch(()=>[]),listKnowledgeBase().catch(()=>[])
+  ])
+  return {settings,menu:menu.filter(x=>x.is_available!==false),promotions:promotions.filter(x=>x.is_active),knowledge:knowledge.filter(x=>x.is_active)}
 }
