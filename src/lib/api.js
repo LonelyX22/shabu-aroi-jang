@@ -84,7 +84,7 @@ export async function rejectReservation(id){
 }
 export async function getSession(token){
   if(!supabaseConfigured) {
-    const db=getDemo(); const s=db.sessions.find(x=>x.token===token&&x.status!=='closed'); if(!s)return null
+    const db=getDemo(); const s=db.sessions.find(x=>x.token===token); if(!s)return null
     return {...s,table:db.tables.find(t=>t.id===s.table_id)}
   }
   const {data,error}=await supabase.rpc('get_table_session',{p_token:token}); noerr(error); return data
@@ -184,4 +184,26 @@ export function subscribeAll(cb){
     .on('postgres_changes',{event:'*',schema:'public',table:'restaurant_tables'},cb)
     .subscribe()
   return()=>supabase.removeChannel(ch)
+}
+
+
+export async function askAi(message){
+  const fallback = () => {
+    const q=String(message||'').toLowerCase()
+    if(q.includes('ราคา')||q.includes('price')) return 'บุฟเฟ่ต์ผู้ใหญ่ 299 บาท/คน รวมน้ำและเป็นราคา NET ครับ'
+    if(q.includes('เปิด')||q.includes('เวลา')||q.includes('hour')) return 'ร้านเปิด 11:00–22:00 น. ทุกวันครับ'
+    if(q.includes('ที่อยู่')||q.includes('อยู่ไหน')||q.includes('location')) return 'ร้านอยู่ที่ 125/3 ม.5 ต.สามควายเผือก อ.เมือง จ.นครปฐม 73000 ครับ'
+    if(q.includes('จอง')) return 'กดเมนู “จองโต๊ะ” กรอกชื่อ เบอร์ วันที่ เวลา และจำนวนคน จากนั้นรอร้านยืนยันโต๊ะครับ'
+    if(q.includes('เด็ก')) return 'เด็กต่ำกว่า 90 ซม. ฟรี, 90–120 ซม. 149 บาท และสูงกว่า 120 ซม. คิดราคา 299 บาทครับ'
+    if(q.includes('prompt')||q.includes('พร้อมเพย์')||q.includes('จ่าย')) return 'รองรับเงินสดและ PromptPay เบอร์ 06-1564-0529 ครับ'
+    return 'สอบถามได้เลยครับ เช่น ราคา เวลาเปิด เมนู ที่ตั้ง การจองโต๊ะ หรือวิธีชำระเงิน'
+  }
+  if(!supabaseConfigured) return fallback()
+  try {
+    const {data,error}=await supabase.functions.invoke('ai-chat',{body:{message}})
+    if(error) throw error
+    return data?.answer || fallback()
+  } catch {
+    return fallback()
+  }
 }
