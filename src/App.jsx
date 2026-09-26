@@ -275,13 +275,54 @@ function Dashboard(){
 }
 
 function ReservationsAdmin(){
-  const [items,setItems]=useState([]),[tables,setTables]=useState([]),[selected,setSelected]=useState({})
+  const [items,setItems]=useState([]),[tables,setTables]=useState([]),[selected,setSelected]=useState({}),[qrItem,setQrItem]=useState(null)
   async function load(){const [r,tb]=await Promise.all([listReservations(),listTables()]);setItems(r);setTables(tb)}
   useEffect(()=>{load();return subscribeAll(load)},[])
   async function confirmOne(r){const tableId=selected[r.id];if(!tableId)return alert('เลือกโต๊ะก่อน');await confirmReservation(r.id,tableId);await load()}
   async function rejectOne(id){if(confirm('ไม่อนุมัติการจองนี้?')){await rejectReservation(id);await load()}}
   const available=tables.filter(x=>x.status==='available')
-  return <><AdminHead eyebrow="RESERVATIONS" title="การจองโต๊ะ" desc="เลือกรับและกำหนดโต๊ะให้ลูกค้า"/><div className="admin-card"><div className="admin-list reservations">{items.map(r=><div key={r.id}><span><b>{r.customer_name} • {r.guest_count} คน</b><small>{r.reservation_date} {r.reservation_time} • {r.customer_phone} • Code {r.code}</small></span><div className="reservation-actions">{r.status==='pending'?<><select value={selected[r.id]||''} onChange={e=>setSelected(s=>({...s,[r.id]:e.target.value}))}><option value="">เลือกโต๊ะ</option>{available.filter(t=>t.seats>=Number(r.guest_count||1)).map(t=><option key={t.id} value={t.id}>{t.code} ({t.seats} ที่)</option>)}</select><button className="mini-btn ok" onClick={()=>confirmOne(r)}>ยืนยัน</button><button className="mini-btn danger" onClick={()=>rejectOne(r.id)}>ปฏิเสธ</button></>:<span className={`reservation-state ${r.status}`}>{r.status}</span>}</div></div>)}{!items.length&&<p className="muted">ยังไม่มีการจอง</p>}</div></div></>
+  const qrUrl=qrItem?.session_token?`${window.location.origin}/shabu-aroi-jang/table/${qrItem.session_token}`:''
+  return <>
+    <AdminHead eyebrow="RESERVATIONS" title="การจองโต๊ะ" desc="เลือกรับ กำหนดโต๊ะ และเปิดดู QR ของลูกค้า"/>
+    <div className="admin-card"><div className="admin-list reservations">
+      {items.map(r=><div key={r.id}>
+        <span>
+          <b>{r.customer_name} • {r.guest_count} คน</b>
+          <small>{r.reservation_date} {r.reservation_time} • {r.customer_phone} • Code {r.code}</small>
+          {r.status==='confirmed'&&<small><b>โต๊ะ {r.table_code||'-'}</b> • Session {r.session_status||'-'}</small>}
+        </span>
+        <div className="reservation-actions">
+          {r.status==='pending'?<>
+            <select value={selected[r.id]||''} onChange={e=>setSelected(s=>({...s,[r.id]:e.target.value}))}>
+              <option value="">เลือกโต๊ะ</option>
+              {available.filter(t=>t.seats>=Number(r.guest_count||1)).map(t=><option key={t.id} value={t.id}>{t.code} ({t.seats} ที่)</option>)}
+            </select>
+            <button className="mini-btn ok" onClick={()=>confirmOne(r)}>ยืนยัน</button>
+            <button className="mini-btn danger" onClick={()=>rejectOne(r.id)}>ปฏิเสธ</button>
+          </>:<>
+            <span className={`reservation-state ${r.status}`}>{r.status}</span>
+            {r.status==='confirmed'&&r.session_token&&<button className="mini-btn qr" onClick={()=>setQrItem(r)}>ดู QR</button>}
+          </>}
+        </div>
+      </div>)}
+      {!items.length&&<p className="muted">ยังไม่มีการจอง</p>}
+    </div></div>
+
+    {qrItem&&<div className="modal-backdrop" onClick={()=>setQrItem(null)}>
+      <div className="qr-admin-modal" onClick={e=>e.stopPropagation()}>
+        <button className="modal-close" onClick={()=>setQrItem(null)}>×</button>
+        <span className="eyebrow">TABLE QR</span>
+        <h2>โต๊ะ {qrItem.table_code||'-'}</h2>
+        <p>{qrItem.customer_name} • {qrItem.guest_count} คน • Code {qrItem.code}</p>
+        <div className="admin-qr-box"><QRCodeSVG value={qrUrl} size={240}/></div>
+        <small>สแกนเพื่อเปิดหน้าสั่งอาหารของโต๊ะนี้</small>
+        <div className="qr-modal-actions">
+          <a className="btn dark" href={qrUrl} target="_blank" rel="noreferrer">เปิดหน้าสั่งอาหาร</a>
+          <button className="btn ghost" onClick={()=>navigator.clipboard?.writeText(qrUrl)}>คัดลอกลิงก์ QR</button>
+        </div>
+      </div>
+    </div>}
+  </>
 }
 
 function TablesAdmin(){
