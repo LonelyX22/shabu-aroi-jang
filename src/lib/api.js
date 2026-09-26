@@ -201,11 +201,19 @@ export async function listServiceCalls(){
 
   const merged=new Map()
 
+  // Exact source for production databases with the admin helper installed.
+  try{
+    const exact=await supabase.rpc('admin_list_service_calls')
+    if(!exact.error){
+      for(const x of exact.data||[]) merged.set(x.id,x)
+    }
+  }catch{}
+
   // Normal admin query.
   try{
     let result=await supabase
       .from('service_calls')
-      .select('*, table_sessions(restaurant_tables(code))')
+      .select('*, table_sessions(id,table_id,restaurant_tables(code))')
       .order('created_at',{ascending:false})
 
     if(result.error){
@@ -215,15 +223,22 @@ export async function listServiceCalls(){
     if(!result.error){
       const rows=result.data||[]
       let sessionMap=new Map()
+
       if(rows.length && !rows[0]?.table_sessions){
         const sessionIds=[...new Set(rows.map(x=>x.session_id).filter(Boolean))]
         if(sessionIds.length){
           const sessions=await supabase.from('table_sessions')
-            .select('id,restaurant_tables(code)')
+            .select('id,table_id')
             .in('id',sessionIds)
-          sessionMap=new Map((sessions.data||[]).map(s=>[s.id,s.restaurant_tables?.code]))
+          const tableIds=[...new Set((sessions.data||[]).map(x=>x.table_id).filter(Boolean))]
+          const tables=tableIds.length
+            ? await supabase.from('restaurant_tables').select('id,code').in('id',tableIds)
+            : {data:[]}
+          const tableMap=new Map((tables.data||[]).map(t=>[t.id,t.code]))
+          sessionMap=new Map((sessions.data||[]).map(ss=>[ss.id,tableMap.get(ss.table_id)||'-']))
         }
       }
+
       for(const x of rows){
         merged.set(x.id,{
           ...x,
@@ -233,19 +248,28 @@ export async function listServiceCalls(){
     }
   }catch{}
 
-  // Notification trigger is written at the same moment the customer creates
-  // a service call. Merge it so Admin never falsely shows "no calls".
+  // Notification fallback: if the service call row is hidden by an old RLS
+  // policy, infer the table from the current table status. create_service_call
+  // always marks that table as "service".
   try{
     const notices=(await listNotifications()).filter(n=>n.event_type==='service_calls')
+    const tables=await listTables().catch(()=>[])
+    const serviceTables=tables.filter(t=>t.status==='service')
+
     for(const n of notices){
       if(merged.has(n.entity_id))continue
+
+      const inferredCode=serviceTables.length===1
+        ? serviceTables[0].code
+        : serviceTables.map(t=>t.code).join(' / ')||'-'
+
       merged.set(n.entity_id,{
         id:n.entity_id,
         type:n.message||'staff',
         note:'',
         status:'pending',
         created_at:n.created_at,
-        table_code:'-',
+        table_code:inferredCode,
         notification_fallback:true
       })
     }
