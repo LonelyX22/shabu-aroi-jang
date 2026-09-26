@@ -295,7 +295,7 @@ begin
 
   return jsonb_build_object('id',v_order_id,'order_number',v_order_number,'status','pending');
 end;
-$;
+$$;
 
 create or replace function public.request_bill(p_token text)
 returns jsonb
