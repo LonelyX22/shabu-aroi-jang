@@ -284,7 +284,11 @@ function AdminHead({eyebrow,title,desc,action}){return <div className="admin-hea
 
 function Dashboard(){
   const [tables,setTables]=useState([]),[orders,setOrders]=useState([]),[res,setRes]=useState([]),[calls,setCalls]=useState([]),[bills,setBills]=useState([]),[reviews,setReviews]=useState([])
-  async function load(){const [a,b,c,d,e,f]=await Promise.all([listTables(),listOrders(),listReservations(),listServiceCalls(),listBills(),listReviews()]);setTables(a);setOrders(b);setRes(c);setCalls(d);setBills(e);setReviews(f)}
+  async function load(){
+    const result=await Promise.allSettled([listTables(),listOrders(),listReservations(),listServiceCalls(),listBills(),listReviews()])
+    const val=(i)=>result[i].status==='fulfilled'?result[i].value:[]
+    setTables(val(0));setOrders(val(1));setRes(val(2));setCalls(val(3));setBills(val(4));setReviews(val(5))
+  }
   useEffect(()=>{load();return subscribeAll(load)},[])
   const avg=reviews.length?(reviews.reduce((s,x)=>s+Number(x.overall||0),0)/reviews.length).toFixed(1):'-'
   const cards=[
