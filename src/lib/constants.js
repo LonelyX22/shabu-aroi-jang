@@ -99,9 +99,9 @@ export const MENU = [
   id:`m${index+1}`, category, name_th, name_en, emoji, is_available:true, sort_order:index+1
 }))
 
-export const ORDER_FLOW = ['pending','accepted','preparing','ready','served']
+export const ORDER_FLOW = ['pending','accepted','preparing','ready','serving','served']
 export const ORDER_LABEL = {
-  pending:'รอรับ', accepted:'รับแล้ว', preparing:'กำลังเตรียม', ready:'พร้อมเสิร์ฟ', served:'เสิร์ฟแล้ว', cancelled:'ยกเลิก'
+  pending:'รอรับ', accepted:'รับแล้ว', preparing:'กำลังเตรียม', ready:'พร้อมเสิร์ฟ', serving:'กำลังนำไปเสิร์ฟ', served:'เสิร์ฟแล้ว', cancelled:'ยกเลิก'
 }
 export const TABLE_LABEL = {
   available:'ว่าง', reserved:'จองแล้ว', occupied:'กำลังใช้บริการ', service:'เรียกพนักงาน',
