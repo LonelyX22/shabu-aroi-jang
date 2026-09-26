@@ -149,8 +149,34 @@ export async function requestBill(token){
 }
 export async function listBills(){
   if(!supabaseConfigured)return getDemo().bills
-  const {data,error}=await supabase.from('bills').select('*, table_sessions(restaurant_tables(code))').order('created_at',{ascending:false}); noerr(error)
-  return (data||[]).map(x=>({...x,table_code:x.table_sessions?.restaurant_tables?.code}))
+
+  let result=await supabase
+    .from('bills')
+    .select('*, table_sessions(restaurant_tables(code))')
+    .order('created_at',{ascending:false})
+
+  if(!result.error){
+    return (result.data||[]).map(x=>({
+      ...x,
+      table_code:x.table_sessions?.restaurant_tables?.code
+    }))
+  }
+
+  // Fallback for an older schema/PostgREST relationship cache.
+  result=await supabase.from('bills').select('*').order('created_at',{ascending:false})
+  noerr(result.error)
+
+  const bills=result.data||[]
+  const sessionIds=[...new Set(bills.map(x=>x.session_id).filter(Boolean))]
+  if(!sessionIds.length)return bills
+
+  const sessions=await supabase
+    .from('table_sessions')
+    .select('id, restaurant_tables(code)')
+    .in('id',sessionIds)
+
+  const map=new Map((sessions.data||[]).map(s=>[s.id,s.restaurant_tables?.code]))
+  return bills.map(x=>({...x,table_code:map.get(x.session_id)||'-'}))
 }
 export async function closeBill(id,paymentMethod){
   if(!supabaseConfigured)return mutate(db=>{
