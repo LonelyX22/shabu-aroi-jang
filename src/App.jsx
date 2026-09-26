@@ -40,19 +40,19 @@ function Status({value,type='order'}) {
 function CustomerShell({children,lang,setLang,settings}) {
   const open=shopIsOpen(settings)
   const address=t(lang,SHOP.addressTh,'125/3 Moo 5, Sam Khwai Phueak, Mueang Nakhon Pathom, Nakhon Pathom 73000')
-  return <div className="customer-shell premium-site">
+  return <div className="customer-shell premium-site luxe-site">
     {!supabaseConfigured && <div className="demo-bar">{t(lang,'DEMO MODE • เชื่อม Supabase แล้วข้อมูลจะเป็น Realtime จริง','DEMO MODE • Connect Supabase for live realtime data')}</div>}
-    <header className="topbar">
+    <header className="topbar luxe-topbar">
       <div className="wrap topbar-inner">
-        <Link className="brand" to="/"><Logo small/><div><strong>{lang==='th'?SHOP.nameTh:SHOP.nameEn}</strong><span>Japanese Shabu Buffet</span></div></Link>
-        <nav className="main-nav">
+        <Link className="brand luxe-brand" to="/"><Logo small/><div><strong>{lang==='th'?SHOP.nameTh:SHOP.nameEn}</strong><span>JAPANESE SHABU BUFFET</span></div></Link>
+        <nav className="main-nav luxe-nav">
           <NavLink to="/">{t(lang,'หน้าแรก','Home')}</NavLink>
           <NavLink to="/menu">{t(lang,'เมนู','Menu')}</NavLink>
           <NavLink to="/reserve">{t(lang,'จองโต๊ะ','Reserve')}</NavLink>
           <NavLink to="/reservation">{t(lang,'เช็กการจอง','My Booking')}</NavLink>
           <NavLink to="/chat">{t(lang,'AI Chat','AI Chat')}</NavLink>
         </nav>
-        <div className="top-actions">
+        <div className="top-actions luxe-actions">
           <span className={open?'open-pill':'closed-pill'}>{open?t(lang,'● เปิดร้าน','● Open'):t(lang,'● ปิดร้าน','● Closed')}</span>
           <button className="lang" onClick={()=>setLang(lang==='th'?'en':'th')}>{lang==='th'?'EN':'TH'}</button>
         </div>
@@ -60,9 +60,9 @@ function CustomerShell({children,lang,setLang,settings}) {
     </header>
     {!open && <div className="closed-banner">{t(lang,'ขณะนี้ร้านปิดรับลูกค้าใหม่ • ยังสามารถตรวจสอบการจองและพูดคุยกับ AI ได้','We are currently closed for new guests • You can still check bookings and chat with AI')}</div>}
     {children}
-    <footer>
+    <footer className="luxe-footer">
       <div className="wrap footer-grid">
-        <div><Logo small/><h3>{lang==='th'?SHOP.nameTh:SHOP.nameEn}</h3><p>{t(lang,'บุฟเฟ่ต์ชาบู 299 บาท รวมน้ำ NET • อิ่มคุ้มในนครปฐม','Shabu buffet ฿299, drinks included, NET • Nakhon Pathom')}</p></div>
+        <div><Logo small/><h3>{lang==='th'?SHOP.nameTh:SHOP.nameEn}</h3><p>{t(lang,'ชาบูบุฟเฟ่ต์พรีเมียม 299 บาท รวมน้ำ NET','Premium shabu buffet ฿299, drinks included, NET')}</p></div>
         <div><b>{t(lang,'ติดต่อร้าน','Contact')}</b><p>{SHOP.phone}<br/>{address}</p></div>
         <div><b>{t(lang,'เวลาทำการ','Opening hours')}</b><p>{SHOP.openTime}–{SHOP.closeTime}<br/>{t(lang,`เวลาทาน ${SHOP.diningMinutes} นาที`,`${SHOP.diningMinutes}-minute dining time`)}</p><Link className="footer-admin" to="/admin/login">Admin</Link></div>
       </div>
@@ -72,71 +72,127 @@ function CustomerShell({children,lang,setLang,settings}) {
 
 function Home({lang,settings}) {
   const open=shopIsOpen(settings)
-  const features=lang==='th'?[
-    ['🍲','ซุปหลากหลาย','น้ำดำ หม่าล่า ต้มยำ และอีกมาก'],
-    ['🥩','วัตถุดิบแน่น','หมู เนื้อ ซีฟู้ด และผักสด'],
-    ['📱','สั่งผ่าน QR','สั่งได้ทันทีจากโต๊ะ ไม่ต้องรอ'],
-    ['🔔','เรียกพนักงาน','เติมซุป เก็บจาน และเช็กบิลได้']
-  ]:[
-    ['🍲','Signature broths','Japanese, Mala, Tom Yum and more'],
-    ['🥩','Quality ingredients','Pork, beef, seafood and fresh vegetables'],
-    ['📱','Order by QR','Order instantly from your table'],
-    ['🔔','Call staff','Soup refill, table service and checkout']
-  ]
-  const steps=lang==='th'?[
-    ['1','จองโต๊ะ','เลือกวัน เวลา และจำนวนคน'],
-    ['2','ร้านยืนยัน','ทีมงานจัดโต๊ะที่เหมาะสมให้คุณ'],
-    ['3','รับ QR','สแกนเพื่อเปิดโต๊ะเมื่อมาถึงร้าน'],
-    ['4','อิ่มไม่อั้น','สั่งอาหารเข้าครัวแบบ Realtime']
-  ]:[
-    ['1','Reserve','Choose your date, time and party size'],
-    ['2','Get confirmed','Our team assigns the right table'],
-    ['3','Scan your QR','Activate your table when you arrive'],
-    ['4','Enjoy unlimited','Send orders to the kitchen in realtime']
-  ]
   const address=t(lang,SHOP.addressTh,'125/3 Moo 5, Sam Khwai Phueak, Mueang Nakhon Pathom, Nakhon Pathom 73000')
+  const highlights=lang==='th'?[
+    ['01','ซุปซิกเนเจอร์','น้ำดำญี่ปุ่น หม่าล่า ต้มยำ และซุปยอดนิยม'],
+    ['02','วัตถุดิบพรีเมียม','หมู เนื้อ ซีฟู้ด ผักสด เติมได้ไม่อั้น'],
+    ['03','สั่งอาหารผ่าน QR','สั่งตรงจากโต๊ะ เข้าครัวแบบ Realtime'],
+    ['04','บริการถึงโต๊ะ','เติมซุป ขอจาน เรียกพนักงาน และเช็กบิล']
+  ]:[
+    ['01','Signature broths','Japanese black soup, Mala, Tom Yum and favorites'],
+    ['02','Premium ingredients','Pork, beef, seafood and fresh vegetables'],
+    ['03','QR table ordering','Send orders straight to the kitchen in realtime'],
+    ['04','Table service','Soup refill, extra plates, staff call and checkout']
+  ]
+  const journey=lang==='th'?[
+    ['จองโต๊ะ','เลือกวัน เวลา และจำนวนคน'],
+    ['รับการยืนยัน','ร้านจัดโต๊ะที่เหมาะสมให้'],
+    ['สแกน QR','เปิดโต๊ะและเริ่ม Session'],
+    ['อิ่มแบบพรีเมียม','สั่งได้ต่อเนื่องตลอดมื้อ']
+  ]:[
+    ['Reserve','Choose your date, time and party size'],
+    ['Get confirmed','We assign the best available table'],
+    ['Scan your QR','Activate the table session'],
+    ['Enjoy premium dining','Keep ordering throughout your meal']
+  ]
   return <>
-    <section className="hero premium-hero">
-      <div className="hero-glow glow-one"></div><div className="hero-glow glow-two"></div>
-      <div className="wrap hero-grid">
-        <div className="hero-copy">
-          <span className="eyebrow">SHABU • NAKHON PATHOM</span>
-          <div className="hero-kicker">{t(lang,'JAPANESE SHABU BUFFET','JAPANESE SHABU BUFFET')}</div>
-          <h1>{t(lang,'ชาบูร้อนๆ','Premium Shabu')}<br/><em>{t(lang,'อร่อยไม่อั้น','Unlimited Pleasure')}</em></h1>
-          <p>{t(lang,'บุฟเฟ่ต์ชาบูพรีเมียม ครบทั้งหมู เนื้อ ซีฟู้ด ผัก ของทอด เครื่องดื่ม และของหวาน จบในราคาเดียว','A premium all-you-can-eat shabu experience with pork, beef, seafood, vegetables, sides, drinks and dessert — all in one price.')}</p>
-          <div className="hero-price"><strong>299</strong><span>{t(lang,'บาท / คน','THB / person')}<br/>{t(lang,'รวมน้ำ + NET','Drinks included • NET')}</span></div>
-          <div className="hero-actions">
-            <Link className={open?'btn primary':'btn disabled'} to={open?'/reserve':'/'}>{t(lang,'จองโต๊ะ','Reserve a table')}</Link>
-            <Link className="btn ghost" to="/menu">{t(lang,'ดูเมนู','Explore menu')}</Link>
-            <Link className="btn dark" to="/chat">✦ AI Concierge</Link>
+    <section className="luxe-hero">
+      <div className="luxe-aurora luxe-aurora-a"></div>
+      <div className="luxe-aurora luxe-aurora-b"></div>
+      <div className="luxe-grain"></div>
+      <div className="wrap luxe-hero-grid">
+        <div className="luxe-copy">
+          <div className="luxe-overline"><span></span> SHABU • NAKHON PATHOM</div>
+          <div className="luxe-script">{t(lang,'Japanese Premium Buffet','Japanese Premium Buffet')}</div>
+          <h1>{t(lang,'ชาบูที่ไม่ได้มีแค่อิ่ม','More than just')}<br/><em>{t(lang,'แต่ต้องรู้สึกพิเศษ','a buffet experience')}</em></h1>
+          <p>{t(lang,'ชาบูบุฟเฟ่ต์ในบรรยากาศพรีเมียม จัดเต็มทั้งหมู เนื้อ ซีฟู้ด ผัก ของทอด เครื่องดื่ม และของหวาน ในราคาเดียวแบบ NET','A premium all-you-can-eat shabu experience with pork, beef, seafood, vegetables, sides, drinks and dessert — one NET price.')}</p>
+          <div className="luxe-hero-actions">
+            <Link className={open?'luxe-btn gold':'luxe-btn disabled'} to={open?'/reserve':'/'}>{t(lang,'จองโต๊ะตอนนี้','Reserve now')} <span>↗</span></Link>
+            <Link className="luxe-btn glass" to="/menu">{t(lang,'ดูเมนูทั้งหมด','View menu')}</Link>
           </div>
-          <div className="hero-badges">
-            <span>⏱ {t(lang,`${SHOP.diningMinutes} นาที`,`${SHOP.diningMinutes} min`)}</span>
-            <span>🥤 {t(lang,'รวมเครื่องดื่ม','Drinks included')}</span>
-            <span>💳 PromptPay</span>
+          <div className="luxe-meta-row">
+            <div><small>{t(lang,'เวลาทาน','Dining')}</small><b>{SHOP.diningMinutes} {t(lang,'นาที','min')}</b></div>
+            <div><small>{t(lang,'เครื่องดื่ม','Drinks')}</small><b>{t(lang,'รวมแล้ว','Included')}</b></div>
+            <div><small>{t(lang,'ชำระเงิน','Payment')}</small><b>PromptPay</b></div>
           </div>
         </div>
-        <div className="hero-art premium-logo-stage">
-          <div className="logo-halo"></div>
-          <Logo hero/>
-          <div className="float-card one">🔥 {t(lang,'5 น้ำซุป','5 broths')}</div>
-          <div className="float-card two">🥩 {t(lang,'70+ เมนู','70+ items')}</div>
-          <div className="premium-seal"><span>299</span><small>{t(lang,'NET / คน','NET / PERSON')}</small></div>
+
+        <div className="luxe-visual">
+          <div className="luxe-orbit one"></div><div className="luxe-orbit two"></div>
+          <div className="luxe-logo-shell">
+            <div className="luxe-logo-glow"></div>
+            <Logo hero/>
+          </div>
+          <div className="luxe-price-card">
+            <small>{t(lang,'บุฟเฟ่ต์ NET','BUFFET NET')}</small>
+            <strong>299</strong>
+            <span>{t(lang,'บาท / คน','THB / PERSON')}</span>
+          </div>
+          <div className="luxe-float-chip chip-a">✦ {t(lang,'70+ เมนู','70+ ITEMS')}</div>
+          <div className="luxe-float-chip chip-b">🔥 {t(lang,'5 น้ำซุป','5 BROTHS')}</div>
+        </div>
+      </div>
+      <div className="luxe-scroll-cue"><span></span>{t(lang,'เลื่อนลงเพื่อดูประสบการณ์ของเรา','DISCOVER THE EXPERIENCE')}</div>
+    </section>
+
+    <section className="luxe-highlight-section">
+      <div className="wrap">
+        <div className="luxe-section-heading">
+          <div><span>THE EXPERIENCE</span><h2>{t(lang,'ทุกดีเทล ถูกออกแบบให้มื้อชาบูดูพิเศษขึ้น','Every detail, designed to feel special')}</h2></div>
+          <p>{t(lang,'ตั้งแต่รสชาติ ไปจนถึงระบบสั่งอาหาร เราออกแบบให้ทุกอย่างเรียบง่าย รวดเร็ว และดูพรีเมียม','From flavor to ordering flow, everything is designed to feel seamless, fast and premium.')}</p>
+        </div>
+        <div className="luxe-highlight-grid">
+          {highlights.map(([n,h,p],idx)=><article className={`luxe-highlight-card card-${idx+1}`} key={n}>
+            <div className="shine"></div><small>{n}</small><h3>{h}</h3><p>{p}</p><span>↗</span>
+          </article>)}
         </div>
       </div>
     </section>
-    <section className="feature-band"><div className="wrap feature-grid">
-      {features.map(([i,h,p])=><div className="feature-card" key={h}><span>{i}</span><div><b>{h}</b><small>{p}</small></div></div>)}
-    </div></section>
-    <section className="section premium-section"><div className="wrap split">
-      <div className="panel warm"><span className="eyebrow">HOW IT WORKS</span><h2>{t(lang,'จองง่าย สั่งไว อิ่มแบบพรีเมียม','Simple booking. Seamless dining.')}</h2>
-        <div className="steps">{steps.map(([n,h,p])=><div key={n}><i>{n}</i><span><b>{h}</b><small>{p}</small></span></div>)}</div>
+
+    <section className="luxe-price-section">
+      <div className="wrap luxe-price-layout">
+        <div className="luxe-price-copy">
+          <span className="eyebrow">ONE PRICE • FULL EXPERIENCE</span>
+          <h2>{t(lang,'ราคาเดียว ได้ครบแบบไม่ต้องคิดเยอะ','One price. Everything you need.')}</h2>
+          <p>{t(lang,'299 บาทต่อคน รวมน้ำแล้วแบบ NET พร้อมเวลาทาน 120 นาที และระบบสั่งผ่าน QR ที่โต๊ะ','฿299 per person, drinks included, NET. Enjoy a 120-minute dining session with table-side QR ordering.')}</p>
+          <div className="luxe-price-big"><span>฿</span><b>299</b><small>/ {t(lang,'คน','person')}</small></div>
+          <Link className="luxe-btn dark" to="/menu">{t(lang,'เปิดดูเมนูทั้งหมด','Explore the full menu')} <span>→</span></Link>
+        </div>
+        <div className="luxe-price-panel">
+          <div className="panel-light"></div>
+          <div className="luxe-mini-stat"><span>70+</span><small>{t(lang,'เมนู','menu items')}</small></div>
+          <div className="luxe-mini-stat"><span>5</span><small>{t(lang,'น้ำซุป','broths')}</small></div>
+          <div className="luxe-mini-stat"><span>120</span><small>{t(lang,'นาที','minutes')}</small></div>
+          <div className="luxe-mini-stat"><span>299</span><small>{t(lang,'บาท NET','THB NET')}</small></div>
+        </div>
       </div>
-      <div className="panel map-card"><span className="eyebrow">LOCATION</span><h2>{t(lang,'พบกันที่นครปฐม','Visit us in Nakhon Pathom')}</h2><p>{address}</p>
-        <div className="fake-map"><div>◆</div><b>{lang==='th'?SHOP.nameTh:SHOP.nameEn}</b><span>{t(lang,'สามควายเผือก • เมืองนครปฐม','Sam Khwai Phueak • Mueang Nakhon Pathom')}</span></div>
-        <a className="btn primary wide" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(SHOP.addressTh)}`} target="_blank" rel="noreferrer">{t(lang,'เปิด Google Maps','Open Google Maps')}</a>
+    </section>
+
+    <section className="luxe-journey-section">
+      <div className="wrap">
+        <div className="luxe-section-heading narrow-heading">
+          <div><span>YOUR JOURNEY</span><h2>{t(lang,'ตั้งแต่จองโต๊ะ จนถึงเช็กบิล ทุกขั้นตอนลื่นไหล','From reservation to checkout, everything flows')}</h2></div>
+        </div>
+        <div className="luxe-journey">
+          {journey.map(([h,p],i)=><div className="luxe-journey-step" key={h}>
+            <i>{String(i+1).padStart(2,'0')}</i><div><h3>{h}</h3><p>{p}</p></div>
+          </div>)}
+        </div>
       </div>
-    </div></section>
+    </section>
+
+    <section className="luxe-location-section">
+      <div className="wrap luxe-location-card">
+        <div className="location-light"></div>
+        <div>
+          <span className="eyebrow">LOCATION • NAKHON PATHOM</span>
+          <h2>{t(lang,'แวะมาอิ่มแบบพรีเมียมกับเรา','Your premium shabu spot in Nakhon Pathom')}</h2>
+          <p>{address}</p>
+          <div className="location-hours"><span>{t(lang,'เปิดทุกวัน','Open daily')}</span><b>{SHOP.openTime}–{SHOP.closeTime}</b></div>
+        </div>
+        <a className="luxe-map-button" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(SHOP.addressTh)}`} target="_blank" rel="noreferrer"><span>⌖</span><div><small>GOOGLE MAPS</small><b>{t(lang,'เปิดเส้นทาง','Get directions')}</b></div><em>↗</em></a>
+      </div>
+    </section>
   </>
 }
 
