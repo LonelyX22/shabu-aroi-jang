@@ -262,23 +262,97 @@ function ReservationPage({lang}) {
 }
 
 function ChatPage({lang}) {
-  const welcome=t(lang,'สวัสดีครับ 👋 ผมเป็น AI ของชาบูอร่อยจัง ถามเรื่องราคา เมนู เวลาเปิด ที่ตั้ง หรือการจองได้เลยครับ','Hello 👋 I’m the Shabu Aroi Jang AI concierge. Ask me about prices, menu, opening hours, location or reservations.')
-  const [messages,setMessages]=useState([{role:'bot',text:welcome}])
-  const [input,setInput]=useState(''); const [busy,setBusy]=useState(false)
-  useEffect(()=>{setMessages([{role:'bot',text:welcome}])},[lang])
-  async function send(){
-    const q=input.trim(); if(!q||busy)return
-    setInput(''); setMessages(m=>[...m,{role:'user',text:q}]); setBusy(true)
-    const answer=await askAi(q); setMessages(m=>[...m,{role:'bot',text:answer}]); setBusy(false)
+  const welcome=t(
+    lang,
+    'สวัสดีครับ 👋 ผมเป็น AI ของชาบูอร่อยจัง คุยกับผมได้ตามปกติเลยครับ จะถามเมนู ราคาเด็ก คำนวณราคากลุ่ม โปรโมชั่น เวลาเปิด หรือการจองก็ได้',
+    'Hello 👋 I’m the Shabu Aroi Jang AI concierge. Chat with me naturally — I can help with menu choices, child pricing, group estimates, promotions, opening hours and reservations.'
+  )
+  const storageKey=`shabu-chat-messages-${lang}`
+  const [messages,setMessages]=useState(()=>{
+    try{
+      const saved=JSON.parse(localStorage.getItem(storageKey)||'null')
+      return Array.isArray(saved)&&saved.length?saved:[{role:'bot',text:welcome}]
+    }catch{return [{role:'bot',text:welcome}]}
+  })
+  const [input,setInput]=useState('')
+  const [busy,setBusy]=useState(false)
+
+  useEffect(()=>{
+    try{
+      const saved=JSON.parse(localStorage.getItem(storageKey)||'null')
+      setMessages(Array.isArray(saved)&&saved.length?saved:[{role:'bot',text:welcome}])
+    }catch{setMessages([{role:'bot',text:welcome}])}
+  },[lang])
+
+  useEffect(()=>{
+    try{localStorage.setItem(storageKey,JSON.stringify(messages.slice(-40)))}catch{}
+  },[messages,storageKey])
+
+  async function send(text=input){
+    const q=String(text||'').trim()
+    if(!q||busy)return
+    const history=messages.slice(-18).map(m=>({role:m.role,text:m.text}))
+    setInput('')
+    setMessages(m=>[...m,{role:'user',text:q}])
+    setBusy(true)
+    try{
+      const answer=await askAi(q,history,lang)
+      setMessages(m=>[...m,{role:'bot',text:answer}])
+    }finally{
+      setBusy(false)
+    }
   }
+
+  function clearChat(){
+    const fresh=[{role:'bot',text:welcome}]
+    setMessages(fresh)
+    try{localStorage.setItem(storageKey,JSON.stringify(fresh))}catch{}
+  }
+
+  const suggestions=lang==='th'
+    ?['มากัน 4 คน มีเด็กสูง 105 ซม. 1 คน ต้องจ่ายเท่าไหร่','มีเมนูเนื้ออะไรบ้าง','แนะนำเมนูสำหรับคนไม่กินเผ็ด','ร้านเปิดกี่โมง']
+    :['We are 4 people with one 105 cm child. How much is it?','What beef dishes do you have?','Recommend something not spicy','What time do you open?']
+
   return <section className="section page premium-page"><div className="wrap chat-wrap">
-    <div className="page-head center"><span className="eyebrow">AI CONCIERGE</span><h1>{t(lang,'ถามชาบู AI','Shabu AI Concierge')}</h1><p>{t(lang,'ผู้ช่วยตอบคำถามเกี่ยวกับร้านได้ตลอดเวลา','Your always-on assistant for restaurant questions.')}</p></div>
-    <div className="chat-card"><div className="chat-log">{messages.map((m,i)=><div key={i} className={`bubble-msg ${m.role}`}><span>{m.role==='bot'?'✦':'🙂'}</span><p>{m.text}</p></div>)}{busy&&<div className="bubble-msg bot"><span>✦</span><p>{t(lang,'กำลังคิด...','Thinking...')}</p></div>}</div>
-      <div className="chat-input"><input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} placeholder={t(lang,'เช่น ร้านเปิดกี่โมง?','e.g. What time do you open?')}/><button className="btn primary" onClick={send}>{t(lang,'ส่ง','Send')}</button></div>
+    <div className="page-head center">
+      <span className="eyebrow">AI CONCIERGE</span>
+      <h1>{t(lang,'คุยกับชาบู AI','Chat with Shabu AI')}</h1>
+      <p>{t(lang,'คุยได้เหมือนพนักงานจริง และจำบริบทที่คุยกันในแชตนี้ได้','Talk naturally like you would with staff. The AI remembers the context of this chat.')}</p>
+    </div>
+
+    <div className="chat-card">
+      <div className="chat-tools">
+        <span>✦ {t(lang,'AI ผู้ช่วยร้าน','Restaurant AI')}</span>
+        <button onClick={clearChat}>{t(lang,'เริ่มแชตใหม่','New chat')}</button>
+      </div>
+
+      <div className="chat-log">
+        {messages.map((m,i)=><div key={i} className={`bubble-msg ${m.role}`}>
+          <span>{m.role==='bot'?'✦':'🙂'}</span>
+          <p>{m.text}</p>
+        </div>)}
+        {busy&&<div className="bubble-msg bot"><span>✦</span><p>{t(lang,'กำลังคิด...','Thinking...')}</p></div>}
+      </div>
+
+      <div className="chat-suggestions">
+        {suggestions.map(x=><button key={x} disabled={busy} onClick={()=>send(x)}>{x}</button>)}
+      </div>
+
+      <div className="chat-input">
+        <input
+          value={input}
+          onChange={e=>setInput(e.target.value)}
+          onKeyDown={e=>e.key==='Enter'&&send()}
+          placeholder={t(lang,'พิมพ์คุยได้เลย เช่น มากัน 4 คน มีเด็ก 1 คน...','Type naturally, e.g. We are 4 people with one child...')}
+          maxLength={2000}
+        />
+        <button className="btn primary" disabled={busy||!input.trim()} onClick={()=>send()}>
+          {t(lang,'ส่ง','Send')}
+        </button>
+      </div>
     </div>
   </div></section>
 }
-
 function TablePage({lang,setLang}) {
   const {token}=useParams()
   const [session,setSession]=useState(null); const [menu,setMenu]=useState([]); const [orders,setOrders]=useState([]); const [tableSettings,setTableSettings]=useState(null); const [slipBusy,setSlipBusy]=useState(false)
