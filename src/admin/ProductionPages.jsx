@@ -174,8 +174,6 @@ export function ReviewsAdvancedPage(){
   return <><Head eyebrow="REVIEWS ANALYTICS" title="รีวิวลูกค้า" desc="กรองดาว วิเคราะห์รายหัวข้อ Export และติดตามรีวิวต่ำ" action={<button className="btn primary" onClick={exportCsv}>Export CSV</button>}/><div className="filter-row">{['all',5,4,3,2,1].map(v=><button className={String(star)===String(v)?'active':''} key={v} onClick={()=>setStar(v)}>{v==='all'?'ทั้งหมด':`${v} ดาว`}</button>)}</div><div className="stat-grid review-stats">{[['overall','รวม'],['taste','รสชาติ'],['freshness','ความสด'],['service','บริการ'],['cleanliness','ความสะอาด'],['value','ความคุ้มค่า']].map(([k,l])=><div className="stat-card" key={k}><span>★</span><div><small>{l}</small><b>{avg(k)}</b></div></div>)}</div><div className="reviews-grid">{list.map(x=><article key={x.id} className={x.is_flagged?'review-flagged':''}><div className="stars">{'★'.repeat(Number(x.overall||0))}{'☆'.repeat(5-Number(x.overall||0))}</div><p>{x.comment||'ไม่มีความคิดเห็นเพิ่มเติม'}</p><small>{dt(x.created_at)}</small><div className="score-mini">รส {x.taste} • สด {x.freshness} • บริการ {x.service} • สะอาด {x.cleanliness} • คุ้ม {x.value}</div><button className={x.is_flagged?'pill-btn bad':'pill-btn good'} onClick={async()=>{await updateReviewAdmin(x.id,{is_flagged:!x.is_flagged,flag_note:!x.is_flagged?'Manager ติดตาม':'');await load()}}>{x.is_flagged?'⚑ ต้องติดตาม':'✓ ปกติ'}</button></article>)}</div></>
 }
 
-export function ReservationTools()
-
 export function ReservationTools(){
   const [busy,setBusy]=useState(false)
   async function expire(){setBusy(true);try{const n=await expireReservations();alert(`หมดอายุ ${n||0} รายการ`)}finally{setBusy(false)}}
