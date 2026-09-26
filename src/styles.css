@@ -55,3 +55,73 @@ footer{background:#2c150f;color:#fff2e5;padding:46px 0 90px;margin-top:40px}.foo
 @media(max-width:560px){
   .wrap{width:min(100% - 22px,1180px)}.section{padding:48px 0}.top-actions{margin-left:auto}.hero h1{font-size:46px}.hero p{font-size:15px}.hero-price strong{font-size:48px}.hero-actions{display:grid}.hero-actions .btn{width:100%}.feature-grid{grid-template-columns:1fr}.menu-grid{grid-template-columns:1fr}.panel{padding:22px}.form-card,.reservation-card,.review-card{padding:18px}.reservation-info{grid-template-columns:1fr}.search-box{display:grid}.floor-grid{grid-template-columns:1fr 1fr}.kitchen-grid,.service-grid,.billing-grid,.reviews-grid{grid-template-columns:1fr}.order-menu-grid{grid-template-columns:1fr}.table-app-head{padding:10px 12px}.table-app-head .logo.small{width:42px;height:42px}.table-nav{top:62px;justify-content:flex-start}.table-content{width:calc(100% - 18px)}.sticky-submit{bottom:10px;width:calc(100% - 20px);justify-content:space-between;gap:8px}.sticky-submit .btn{padding:10px 12px;font-size:12px}.rating-row{align-items:flex-start;gap:10px}.rating-row button{font-size:24px}.shop-mode,.settings-form{grid-template-columns:1fr}.pay-actions{grid-template-columns:1fr}.admin-head h1{font-size:32px}
 }
+
+
+/* Admin reservation QR modal */
+.mini-btn.qr{
+  background:#2c160f;
+  color:#fff;
+}
+.modal-backdrop{
+  position:fixed;
+  inset:0;
+  z-index:100;
+  background:rgba(20,8,5,.58);
+  backdrop-filter:blur(5px);
+  display:grid;
+  place-items:center;
+  padding:20px;
+}
+.qr-admin-modal{
+  position:relative;
+  width:min(480px,100%);
+  background:#fffdf9;
+  border:1px solid var(--line);
+  border-radius:28px;
+  padding:28px;
+  text-align:center;
+  box-shadow:0 30px 90px rgba(0,0,0,.28);
+}
+.qr-admin-modal h2{
+  margin:4px 0;
+  font-size:38px;
+}
+.qr-admin-modal p{
+  margin:0 0 16px;
+  color:var(--muted);
+}
+.modal-close{
+  position:absolute;
+  right:14px;
+  top:12px;
+  width:38px;
+  height:38px;
+  border:0;
+  border-radius:50%;
+  background:#f4e9e2;
+  color:#5b3025;
+  font-size:24px;
+  line-height:1;
+}
+.admin-qr-box{
+  width:max-content;
+  margin:18px auto 12px;
+  padding:14px;
+  background:#fff;
+  border:1px solid var(--line);
+  border-radius:20px;
+}
+.qr-admin-modal>small{
+  display:block;
+  color:var(--muted);
+}
+.qr-modal-actions{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+  margin-top:18px;
+}
+@media(max-width:560px){
+  .qr-modal-actions{grid-template-columns:1fr}
+  .admin-qr-box svg{width:210px;height:210px}
+}
