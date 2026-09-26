@@ -11,7 +11,8 @@ import {
   updatePromotion, markTableReady, registerStaffProfile, createStaffAccount, listChatLogs, uploadMenuImage,
   reorderMenuItems, reorderCategories, mergeSessionTable, detachSessionTable, updateSessionGuests,
   regenerateSessionQr, getSettings, getSlipSignedUrl, reviewPaymentSlip, listReviews, updateReviewAdmin,
-  listKnowledgeBase, createKnowledge, updateKnowledge, deleteKnowledge, listOrders, listReservations, listServiceCalls
+  listKnowledgeBase, createKnowledge, updateKnowledge, deleteKnowledge, listOrders, listReservations, listServiceCalls,
+  requestBill
 } from '../lib/api'
 import { promptPayPayload } from '../lib/promptpay'
 
@@ -88,8 +89,39 @@ export function TablesManager(){
 
 export function BillingManager(){
   const [items,setItems]=useState([]),[edit,setEdit]=useState(null),[payQr,setPayQr]=useState(null),[slip,setSlip]=useState(null),[settings,setSettings]=useState(null)
-  async function load(){const [b,s]=await Promise.all([listBills(),getSettings()]);setItems(b);setSettings(s)}
+  const [sessions,setSessions]=useState([]),[loadError,setLoadError]=useState(''),[busySession,setBusySession]=useState(null)
+
+  async function load(){
+    const [billResult,settingsResult,sessionResult]=await Promise.allSettled([
+      listBills(),getSettings(),listActiveSessions()
+    ])
+
+    if(billResult.status==='fulfilled'){
+      setItems(billResult.value||[])
+      setLoadError('')
+    }else{
+      setItems([])
+      setLoadError(billResult.reason?.message||'โหลดข้อมูลบิลไม่สำเร็จ')
+    }
+
+    if(settingsResult.status==='fulfilled')setSettings(settingsResult.value)
+    if(sessionResult.status==='fulfilled')setSessions(sessionResult.value||[])
+  }
+
   useEffect(()=>{load();return subscribeAll(load)},[])
+
+  async function createBillForSession(session){
+    if(!confirm(`สร้างบิลสำหรับโต๊ะ ${session.table_code||'-'} ?`))return
+    setBusySession(session.id)
+    try{
+      await requestBill(session.token)
+      await load()
+    }catch(e){
+      alert(e.message)
+    }finally{
+      setBusySession(null)
+    }
+  }
   async function saveBill(){try{await updateBillDetails(edit.id,edit);setEdit(null);await load()}catch(e){alert(e.message)}}
   async function pay(b,method){if(!confirm(`ยืนยันรับชำระ ${money(b.total)} ?`))return;try{const paid=await closeBill(b.id,method);await load();setPayQr(null);setTimeout(()=>printReceipt({...b,...paid}),100)}catch(e){alert(e.message)}}
   async function viewSlip(b){try{const url=await getSlipSignedUrl(b.slip_url);setSlip({...b,url})}catch(e){alert(e.message)}}
@@ -98,7 +130,11 @@ export function BillingManager(){
   function printReceipt(b){const w=window.open('','_blank','width=430,height=760');if(!w)return;w.document.write(`<html><head><title>${b.receipt_number||'Receipt'}</title></head><body>${receiptHtml(b)}<script>window.print()</script></body></html>`);w.document.close()}
   function pdfReceipt(b){const doc=new jsPDF({unit:'mm',format:[80,180]});doc.setFontSize(13);doc.text('SHABU AROI JANG',40,10,{align:'center'});doc.setFontSize(9);doc.text(String(b.receipt_number||'RECEIPT'),40,17,{align:'center'});doc.text(`Table: ${b.table_code||'-'}`,6,28);doc.text(`Adult: ${b.adult_count||0}`,6,36);doc.text(`Child: ${b.child_count||0}`,6,43);doc.text(`Extra: ${Number(b.extra_total||0).toFixed(2)} THB`,6,50);doc.text(`Discount: ${Number(b.discount_amount||0).toFixed(2)} THB`,6,57);doc.setFontSize(13);doc.text(`TOTAL: ${Number(b.total||0).toFixed(2)} THB`,6,68);doc.setFontSize(8);doc.text(`Payment: ${b.payment_method||'-'}`,6,77);doc.save(`${b.receipt_number||'receipt'}.pdf`)}
   const ppValue=payQr&&settings?.promptpay?promptPayPayload(settings.promptpay,payQr.total):''
+  const activeSessions=sessions.filter(s=>s.status==='active')
   return <><Head eyebrow="CASHIER PRO" title="เช็คบิล / ชำระเงิน" desc="ผู้ใหญ่/เด็ก, Premium, Coupon, PromptPay QR, ตรวจสลิป, บัตร/EDC และใบเสร็จ PDF"/>
+    {loadError&&<div className="alert warn"><b>โหลดข้อมูล Billing ไม่สำเร็จ</b><span>{loadError}</span><button className="mini-btn" onClick={load}>ลองใหม่</button></div>}
+    {!loadError&&!items.length&&<div className="admin-card billing-empty"><h2>ยังไม่มีบิล</h2><p className="muted">เมื่อลูกค้ากด “เช็คบิล” จาก QR บิลจะขึ้นที่หน้านี้อัตโนมัติ หรือ Cashier สามารถสร้างบิลจากโต๊ะที่กำลังใช้งานได้ด้านล่าง</p></div>}
+    {!!activeSessions.length&&<section className="admin-card cashier-active-tables"><div className="card-head"><div><h2>โต๊ะที่กำลังใช้งาน</h2><p className="muted">กดสร้างบิลได้โดยไม่ต้องรอลูกค้ากดจาก QR</p></div></div><div className="simple-list">{activeSessions.map(s=><div key={s.id}><span><b>โต๊ะ {s.table_code||'-'}</b><small>{s.guest_count||0} คน • เริ่ม {dt(s.started_at||s.created_at)}</small></span><button className="btn primary" disabled={busySession===s.id} onClick={()=>createBillForSession(s)}>{busySession===s.id?'กำลังสร้าง...':'สร้างบิล'}</button></div>)}</div></section>}
     <div className="billing-grid">{items.map(b=><article className={b.status} key={b.id}><div className="billing-top"><div><span>โต๊ะ</span><h2>{b.table_code||'-'}</h2></div><span className={`bill-state ${b.status}`}>{b.status==='paid'?'ชำระแล้ว':'รอชำระ'}</span></div><div className="bill-breakdown"><span>ผู้ใหญ่ <b>{b.adult_count||0}</b></span><span>เด็ก <b>{b.child_count||0}</b></span><span>เด็กฟรี <b>{b.free_child_count||0}</b></span></div><div className="bill-line"><span>ยอดสุทธิ</span><b>{money(b.total)}</b></div>{b.slip_url&&<button className={b.slip_status==='approved'?'pill-btn good':'pill-btn bad'} onClick={()=>viewSlip(b)}>สลิป: {b.slip_status||'pending'}</button>}{b.status==='pending'?<><button className="mini-btn qr wide-mini" onClick={()=>setEdit({...b,adult_count:b.adult_count||b.guest_count||0,child_count:b.child_count||0,free_child_count:b.free_child_count||0,discount_amount:b.discount_amount||0,promotion_code:b.promotion_code||'',note:b.note||''})}>แก้จำนวน / ส่วนลด</button><div className="pay-actions"><button onClick={()=>pay(b,'cash')}>💵 เงินสด</button><button onClick={()=>setPayQr(b)}>📱 PromptPay</button><button onClick={()=>pay(b,'bank_transfer')}>🏦 โอน</button><button onClick={()=>pay(b,'card')}>💳 บัตร / EDC</button></div></>:<><small>{b.receipt_number} • {b.payment_method} • {dt(b.paid_at)}</small><div className="row-actions receipt-actions"><button onClick={()=>printReceipt(b)}>🖨 พิมพ์</button><button onClick={()=>pdfReceipt(b)}>⬇ PDF</button></div></>}</article>)}</div>
     {edit&&<Modal title={`แก้บิลโต๊ะ ${edit.table_code}`} onClose={()=>setEdit(null)}><div className="pro-form"><label>ผู้ใหญ่<input type="number" min="0" value={edit.adult_count} onChange={e=>setEdit(x=>({...x,adult_count:Number(e.target.value)}))}/></label><label>เด็ก<input type="number" min="0" value={edit.child_count} onChange={e=>setEdit(x=>({...x,child_count:Number(e.target.value)}))}/></label><label>เด็กฟรี<input type="number" min="0" value={edit.free_child_count} onChange={e=>setEdit(x=>({...x,free_child_count:Number(e.target.value)}))}/></label><label>ส่วนลด<input type="number" min="0" value={edit.discount_amount} onChange={e=>setEdit(x=>({...x,discount_amount:Number(e.target.value)}))}/></label><label>Promo Code<input value={edit.promotion_code} onChange={e=>setEdit(x=>({...x,promotion_code:e.target.value.toUpperCase()}))}/></label><label>หมายเหตุ<input value={edit.note} onChange={e=>setEdit(x=>({...x,note:e.target.value}))}/></label><div className="span-2 total-preview">ประมาณ {money(edit.adult_count*Number(settings?.buffet_price||299)+edit.child_count*Number(settings?.child_price||149)+Number(edit.extra_total||0)-edit.discount_amount)}</div><button className="btn primary span-2" onClick={saveBill}>บันทึกบิล</button></div></Modal>}
     {payQr&&<Modal title={`PromptPay โต๊ะ ${payQr.table_code}`} onClose={()=>setPayQr(null)}><div className="admin-qr-box"><QRCodeSVG value={ppValue} size={260}/></div><h2 className="center-total">{money(payQr.total)}</h2><p className="muted">PromptPay {settings?.promptpay}</p>{payQr.slip_url&&<p>สลิป: <b>{payQr.slip_status}</b></p>}<button className="btn primary wide" onClick={()=>pay(payQr,'promptpay')}>ยืนยันรับเงินแล้ว</button></Modal>}
