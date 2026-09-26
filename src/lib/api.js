@@ -314,14 +314,32 @@ export async function openWalkin(tableId,adultCount,childCount=0,freeChildCount=
 }
 export async function listActiveSessions(){
   if(!supabaseConfigured) return getDemo().sessions.filter(s=>s.status!=='closed')
-  const {data,error}=await supabase.from('table_sessions')
+
+  // Try the advanced relation first. Older databases may not have
+  // table_session_tables until the production migration is applied.
+  let result=await supabase.from('table_sessions')
     .select('*, restaurant_tables(code,seats), table_session_tables(table_id,is_primary,restaurant_tables(code,seats,status))')
-    .in('status',['reserved','active','billing']).order('created_at',{ascending:false}); noerr(error)
-  return (data||[]).map(s=>({
+    .in('status',['reserved','active','billing'])
+    .order('created_at',{ascending:false})
+
+  if(result.error){
+    result=await supabase.from('table_sessions')
+      .select('*, restaurant_tables(code,seats)')
+      .in('status',['reserved','active','billing'])
+      .order('created_at',{ascending:false})
+  }
+
+  noerr(result.error)
+  return (result.data||[]).map(s=>({
     ...s,
     table_code:s.restaurant_tables?.code,
     table_seats:s.restaurant_tables?.seats,
-    linked_tables:(s.table_session_tables||[]).map(x=>({...x,code:x.restaurant_tables?.code,seats:x.restaurant_tables?.seats,status:x.restaurant_tables?.status}))
+    linked_tables:(s.table_session_tables||[]).map(x=>({
+      ...x,
+      code:x.restaurant_tables?.code,
+      seats:x.restaurant_tables?.seats,
+      status:x.restaurant_tables?.status
+    }))
   }))
 }
 export async function moveTableSession(sessionId,newTableId){
