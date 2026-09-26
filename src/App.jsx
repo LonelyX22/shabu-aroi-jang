@@ -14,6 +14,7 @@ import { MENU, ORDER_FLOW, ORDER_LABEL, SHOP, TABLE_LABEL } from './lib/constant
 import { supabaseConfigured } from './lib/supabase'
 import { AuditPage, BillingManager, ChatHistoryPage, CustomersPage, KnowledgeBasePage, MenuManager, PromotionsPage, ReportsPage, ReviewsAdvancedPage, StaffPage, TablesManager } from './admin/ProductionPages'
 import { promptPayPayload } from './lib/promptpay'
+import premiumLogo from './premiumLogo'
 
 const money=(n)=>new Intl.NumberFormat('th-TH',{style:'currency',currency:'THB',maximumFractionDigits:0}).format(Number(n||0))
 const dateTime=(v)=>v?new Intl.DateTimeFormat('th-TH',{dateStyle:'short',timeStyle:'short'}).format(new Date(v)):'-'
@@ -21,7 +22,7 @@ const t=(lang,th,en)=>lang==='th'?th:en
 
 function Logo({small=false,hero=false}) {
   const fallback=`${import.meta.env.BASE_URL}logo.svg`
-  const src=hero?(localStorage.getItem('shabu-logo-url')||fallback):(localStorage.getItem('shabu-logo-url')||fallback)
+  const src=hero?premiumLogo:(localStorage.getItem('shabu-logo-url')||fallback)
   return <img className={hero?'logo hero-logo':small?'logo small':'logo'} src={src} alt={SHOP.nameTh} />
 }
 
