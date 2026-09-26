@@ -223,10 +223,12 @@ function ChatPage({lang}) {
   </div></section>
 }
 
-function TablePage() {
+function TablePage({lang,setLang}) {
   const {token}=useParams()
   const [session,setSession]=useState(null); const [menu,setMenu]=useState([]); const [orders,setOrders]=useState([]); const [tableSettings,setTableSettings]=useState(null); const [slipBusy,setSlipBusy]=useState(false)
   const [cart,setCart]=useState({}); const [cat,setCat]=useState('ทั้งหมด'); const [notice,setNotice]=useState(''); const [loading,setLoading]=useState(true)
+  const orderEn={pending:'Pending',accepted:'Accepted',preparing:'Preparing',ready:'Ready to serve',serving:'On the way',served:'Served',cancelled:'Cancelled'}
+  const noticeText=(th,en)=>setNotice(t(lang,th,en))
   async function load(){
     try{
       const [s,m,o,st]=await Promise.all([getSession(token),listMenu(),listSessionOrders(token),getSettings()])
@@ -244,43 +246,50 @@ function TablePage() {
   async function submit(){
     const selected=menu.filter(x=>qty(x.id)>0).map(x=>({menu_item_id:x.id,quantity:qty(x.id),name_th:x.name_th,name_en:x.name_en}))
     if(!selected.length)return
-    await createFoodOrder(token,selected);setCart({});setNotice('ส่งรายการเข้าครัวแล้ว');setTimeout(()=>setNotice(''),2500);await load()
+    await createFoodOrder(token,selected);setCart({});noticeText('ส่งรายการเข้าครัวแล้ว','Order sent to the kitchen');setTimeout(()=>setNotice(''),2500);await load()
   }
-  async function service(type){await createServiceCall(token,type);setNotice('เรียกพนักงานแล้ว');setTimeout(()=>setNotice(''),2200)}
-  async function bill(){if(!confirm('ยืนยันเรียกเช็คบิล? หลังจากนี้กรุณารอพนักงาน'))return;await requestBill(token);await load()}
-  if(loading)return <div className="loader">กำลังโหลดโต๊ะ...</div>
-  if(!session)return <section className="section page"><div className="wrap narrow"><div className="empty"><h2>QR นี้ไม่พร้อมใช้งาน</h2><p>กรุณาติดต่อพนักงาน</p></div></div></section>
-  if(session.status==='reserved')return <section className="section page"><div className="wrap narrow"><div className="table-welcome"><span>TABLE</span><h1>{session.table_code||session.table?.code}</h1><p>{session.guest_count} คน • Buffet 299 บาท • {SHOP.diningMinutes} นาที</p><button className="btn primary wide" onClick={enter}>เริ่มใช้โต๊ะและสั่งอาหาร</button></div></div></section>
-  if(session.status==='closed')return <ReviewForm token={token} table={session.table_code||session.table?.code}/>
+  async function service(type){await createServiceCall(token,type);noticeText('เรียกพนักงานแล้ว','Staff request sent');setTimeout(()=>setNotice(''),2200)}
+  async function bill(){if(!confirm(t(lang,'ยืนยันเรียกเช็คบิล? หลังจากนี้กรุณารอพนักงาน','Request the bill? Please wait for staff after confirming.')))return;await requestBill(token);await load()}
+  if(loading)return <div className="loader">{t(lang,'กำลังโหลดโต๊ะ...','Loading table...')}</div>
+  if(!session)return <section className="section page"><div className="wrap narrow"><div className="empty"><h2>{t(lang,'QR นี้ไม่พร้อมใช้งาน','This QR is not available')}</h2><p>{t(lang,'กรุณาติดต่อพนักงาน','Please contact a staff member.')}</p></div></div></section>
+  if(session.status==='reserved')return <section className="section page"><div className="wrap narrow"><div className="table-welcome"><span>TABLE</span><h1>{session.table_code||session.table?.code}</h1><p>{session.guest_count} {t(lang,'คน','guests')} • Buffet 299 {t(lang,'บาท','THB')} • {SHOP.diningMinutes} {t(lang,'นาที','min')}</p><button className="btn primary wide" onClick={enter}>{t(lang,'เริ่มใช้โต๊ะและสั่งอาหาร','Start table session & order')}</button></div></div></section>
+  if(session.status==='closed')return <ReviewForm token={token} table={session.table_code||session.table?.code} lang={lang}/>
   if(session.status==='billing'){
     const b=session.bill||{}
     let pp=''
     try{pp=promptPayPayload(tableSettings?.promptpay||SHOP.promptpay,b.total||0)}catch{}
-    const uploadSlip=async(e)=>{const file=e.target.files?.[0];if(!file)return;setSlipBusy(true);try{await uploadPaymentSlip(token,file);setNotice('ส่งสลิปแล้ว กรุณารอพนักงานตรวจ');await load()}catch(err){alert(err.message)}finally{setSlipBusy(false)}}
-    return <section className="section page"><div className="wrap narrow"><div className="payment-customer"><span className="eyebrow">CHECKOUT • TABLE {session.table_code}</span><h1>รอชำระเงิน</h1><div className="payment-total">{money(b.total)}</div><div className="bill-customer-lines"><span>ผู้ใหญ่ {b.adult_count||0}</span><span>เด็ก {b.child_count||0}</span><span>เด็กฟรี {b.free_child_count||0}</span><span>เมนูเพิ่ม {money(b.extra_total||0)}</span><span>ส่วนลด -{money(b.discount_amount||0)}</span></div>{pp&&<div className="admin-qr-box"><QRCodeSVG value={pp} size={260}/></div>}<p>PromptPay: <b>{tableSettings?.promptpay||SHOP.promptpay}</b></p><label className="upload-slip">📎 อัปโหลดสลิป<input type="file" accept="image/*" disabled={slipBusy} onChange={uploadSlip}/></label>{b.slip_status&&b.slip_status!=='none'&&<div className={`slip-status ${b.slip_status}`}>สถานะสลิป: {({pending:'รอตรวจ',approved:'ผ่านแล้ว',rejected:'ไม่ผ่าน'})[b.slip_status]||b.slip_status}</div>}{tableSettings?.card_payment_url&&<a className="btn dark wide" href={tableSettings.card_payment_url} target="_blank" rel="noreferrer">💳 ชำระด้วยบัตรออนไลน์</a>}<p className="muted">หลังชำระแล้ว กรุณารอพนักงานปิดบิล ระบบจะพาไปหน้ารีวิวอัตโนมัติ</p></div></div></section>
+    const slipLabels=lang==='th'?{pending:'รอตรวจ',approved:'ผ่านแล้ว',rejected:'ไม่ผ่าน'}:{pending:'Pending review',approved:'Approved',rejected:'Rejected'}
+    const uploadSlip=async(e)=>{const file=e.target.files?.[0];if(!file)return;setSlipBusy(true);try{await uploadPaymentSlip(token,file);noticeText('ส่งสลิปแล้ว กรุณารอพนักงานตรวจ','Slip uploaded. Please wait for staff verification.');await load()}catch(err){alert(err.message)}finally{setSlipBusy(false)}}
+    return <section className="section page"><div className="wrap narrow"><div className="payment-customer"><div className="table-language"><button onClick={()=>setLang(lang==='th'?'en':'th')}>{lang==='th'?'EN':'TH'}</button></div><span className="eyebrow">CHECKOUT • TABLE {session.table_code}</span><h1>{t(lang,'รอชำระเงิน','Payment')}</h1><div className="payment-total">{money(b.total)}</div><div className="bill-customer-lines"><span>{t(lang,'ผู้ใหญ่','Adults')} {b.adult_count||0}</span><span>{t(lang,'เด็ก','Children')} {b.child_count||0}</span><span>{t(lang,'เด็กฟรี','Free children')} {b.free_child_count||0}</span><span>{t(lang,'เมนูเพิ่ม','Add-ons')} {money(b.extra_total||0)}</span><span>{t(lang,'ส่วนลด','Discount')} -{money(b.discount_amount||0)}</span></div>{pp&&<div className="admin-qr-box"><QRCodeSVG value={pp} size={260}/></div>}<p>PromptPay: <b>{tableSettings?.promptpay||SHOP.promptpay}</b></p><label className="upload-slip">📎 {t(lang,'อัปโหลดสลิป','Upload payment slip')}<input type="file" accept="image/*" disabled={slipBusy} onChange={uploadSlip}/></label>{b.slip_status&&b.slip_status!=='none'&&<div className={`slip-status ${b.slip_status}`}>{t(lang,'สถานะสลิป','Slip status')}: {slipLabels[b.slip_status]||b.slip_status}</div>}{tableSettings?.card_payment_url&&<a className="btn dark wide" href={tableSettings.card_payment_url} target="_blank" rel="noreferrer">💳 {t(lang,'ชำระด้วยบัตรออนไลน์','Pay by card online')}</a>}<p className="muted">{t(lang,'หลังชำระแล้ว กรุณารอพนักงานปิดบิล ระบบจะพาไปหน้ารีวิวอัตโนมัติ','After payment, please wait for staff to close the bill. You will then be taken to the review page.')}</p></div></div></section>
   }
+  const serviceOptions=lang==='th'
+    ?[['soup','🍲 เติมน้ำซุป'],['plates','🍽 ขอจานเพิ่ม'],['sauce','🥣 ขอน้ำจิ้ม'],['cleanup','🧹 เก็บจาน'],['staff','🔔 เรียกพนักงาน']]
+    :[['soup','🍲 Refill soup'],['plates','🍽 More plates'],['sauce','🥣 More sauce'],['cleanup','🧹 Clear dishes'],['staff','🔔 Call staff']]
   return <section className="table-app">
     {notice&&<div className="toast">{notice}</div>}
-    <div className="table-app-head"><div><Logo small/><div><small>TABLE SESSION</small><h2>โต๊ะ {session.table_code||session.table?.code}</h2></div></div><span>{session.guest_count} คน</span></div>
-    <div className="table-nav"><button onClick={()=>document.getElementById('order-menu')?.scrollIntoView()}>🍲 สั่งอาหาร</button><button onClick={()=>document.getElementById('my-orders')?.scrollIntoView()}>📦 รายการของฉัน</button><button onClick={()=>service('staff')}>🔔 เรียกพนักงาน</button><button className="bill" onClick={bill}>💳 เช็คบิล</button></div>
+    <div className="table-app-head"><div><Logo small/><div><small>TABLE SESSION</small><h2>{t(lang,'โต๊ะ','Table')} {session.table_code||session.table?.code}</h2></div></div><div className="table-head-actions"><span>{session.guest_count} {t(lang,'คน','guests')}</span><button className="table-lang-btn" onClick={()=>setLang(lang==='th'?'en':'th')}>{lang==='th'?'EN':'TH'}</button></div></div>
+    <div className="table-nav"><button onClick={()=>document.getElementById('order-menu')?.scrollIntoView()}>🍲 {t(lang,'สั่งอาหาร','Order')}</button><button onClick={()=>document.getElementById('my-orders')?.scrollIntoView()}>📦 {t(lang,'รายการของฉัน','My orders')}</button><button onClick={()=>service('staff')}>🔔 {t(lang,'เรียกพนักงาน','Call staff')}</button><button className="bill" onClick={bill}>💳 {t(lang,'เช็คบิล','Bill')}</button></div>
     <div className="table-content" id="order-menu">
-      <div className="table-title"><div><span className="eyebrow">UNLIMITED MENU</span><h1>อยากทานอะไรเพิ่ม?</h1></div><div className="cart-count">{totalItems} รายการ</div></div>
-      <div className="chips horizontal">{cats.map(c=><button key={c} className={cat===c?'active':''} onClick={()=>setCat(c)}>{c}</button>)}</div>
-      <div className="order-menu-grid">{items.map(x=><div className="order-menu-card" key={x.id}><div className="food-emoji small">{x.emoji||'🍲'}</div><div className="food-copy"><small>{x.category}{x.is_premium?' • PREMIUM':''}</small><b>{x.name_th}</b>{Number(x.extra_price||0)>0&&<em className="extra-price">+{money(x.extra_price)}</em>}</div><div className="stepper"><button onClick={()=>add(x.id,-1)}>−</button><strong>{qty(x.id)}</strong><button onClick={()=>add(x.id,1)}>+</button></div></div>)}</div>
-      {totalItems>0&&<div className="sticky-submit"><span><b>{totalItems}</b> รายการที่เลือก{extraTotal>0&&<small> • เพิ่ม {money(extraTotal)}</small>}</span><button className="btn primary" onClick={submit}>ยืนยันและส่งเข้าครัว →</button></div>}
-      <div className="quick-service"><h2>เรียกพนักงาน</h2><div>{[['soup','🍲 เติมน้ำซุป'],['plates','🍽 ขอจานเพิ่ม'],['sauce','🥣 ขอน้ำจิ้ม'],['cleanup','🧹 เก็บจาน'],['staff','🔔 เรียกพนักงาน']].map(([v,l])=><button key={v} onClick={()=>service(v)}>{l}</button>)}</div></div>
-      <div id="my-orders" className="my-orders"><h2>รายการที่สั่ง</h2>{orders.length===0?<p className="muted">ยังไม่มีรายการที่สั่ง</p>:orders.map(o=><article key={o.id}><div><small>{dateTime(o.created_at)}</small><h3>{o.order_number}</h3></div><Status value={o.status}/><ul>{(o.items||o.food_order_items||[]).map((i,k)=><li key={i.id||k}>{i.name_th||i.item_name_th||'เมนู'} × {i.quantity}</li>)}</ul></article>)}</div>
+      <div className="table-title"><div><span className="eyebrow">UNLIMITED MENU</span><h1>{t(lang,'อยากทานอะไรเพิ่ม?','What would you like next?')}</h1></div><div className="cart-count">{totalItems} {t(lang,'รายการ','items')}</div></div>
+      <div className="chips horizontal">{cats.map(c=><button key={c} className={cat===c?'active':''} onClick={()=>setCat(c)}>{categoryLabel(lang,c)}</button>)}</div>
+      <div className="order-menu-grid">{items.map(x=><div className="order-menu-card" key={x.id}><div className="food-emoji small">{x.emoji||'🍲'}</div><div className="food-copy"><small>{categoryLabel(lang,x.category)}{x.is_premium?' • PREMIUM':''}</small><b>{lang==='th'?x.name_th:(x.name_en||x.name_th)}</b>{Number(x.extra_price||0)>0&&<em className="extra-price">+{money(x.extra_price)}</em>}</div><div className="stepper"><button onClick={()=>add(x.id,-1)}>−</button><strong>{qty(x.id)}</strong><button onClick={()=>add(x.id,1)}>+</button></div></div>)}</div>
+      {totalItems>0&&<div className="sticky-submit"><span><b>{totalItems}</b> {t(lang,'รายการที่เลือก','selected')}{extraTotal>0&&<small> • {t(lang,'เพิ่ม','extra')} {money(extraTotal)}</small>}</span><button className="btn primary" onClick={submit}>{t(lang,'ยืนยันและส่งเข้าครัว →','Send to kitchen →')}</button></div>}
+      <div className="quick-service"><h2>{t(lang,'เรียกพนักงาน','Table service')}</h2><div>{serviceOptions.map(([v,l])=><button key={v} onClick={()=>service(v)}>{l}</button>)}</div></div>
+      <div id="my-orders" className="my-orders"><h2>{t(lang,'รายการที่สั่ง','Your orders')}</h2>{orders.length===0?<p className="muted">{t(lang,'ยังไม่มีรายการที่สั่ง','No orders yet.')}</p>:orders.map(o=><article key={o.id}><div><small>{dateTime(o.created_at)}</small><h3>{o.order_number}</h3></div>{lang==='th'?<Status value={o.status}/>:<span className={`status status-${o.status}`}>{orderEn[o.status]||o.status}</span>}<ul>{(o.items||o.food_order_items||[]).map((i,k)=><li key={i.id||k}>{lang==='th'?(i.name_th||i.item_name_th||'เมนู'):(i.name_en||i.item_name_en||i.name_th||'Item')} × {i.quantity}</li>)}</ul></article>)}</div>
     </div>
   </section>
 }
 
-function ReviewForm({token,table}) {
+function ReviewForm({token,table,lang='th'}) {
   const [scores,setScores]=useState({taste:5,freshness:5,service:5,cleanliness:5,value:5,overall:5})
   const [comment,setComment]=useState(''); const [done,setDone]=useState(false)
   async function send(){await submitReview(token,{...scores,comment});setDone(true)}
-  if(done)return <section className="section page"><div className="wrap narrow"><div className="empty"><div className="big-ok">✓</div><h2>ขอบคุณสำหรับความคิดเห็น</h2><p>หวังว่าจะได้ต้อนรับคุณอีกครั้งที่ชาบูอร่อยจัง</p><Link className="btn primary" to="/">กลับหน้าแรก</Link></div></div></section>
-  return <section className="section page"><div className="wrap narrow"><div className="page-head center"><span className="eyebrow">THANK YOU • TABLE {table}</span><h1>ประเมินความพึงพอใจ</h1><p>ช่วยให้เราพัฒนาร้านให้ดีขึ้นในครั้งต่อไป</p></div>
-    <div className="review-card">{Object.entries({taste:'รสชาติอาหาร',freshness:'ความสด',service:'การบริการ',cleanliness:'ความสะอาด',value:'ความคุ้มค่า',overall:'โดยรวม'}).map(([k,l])=><div className="rating-row" key={k}><b>{l}</b><div>{[1,2,3,4,5].map(n=><button className={n<=scores[k]?'on':''} key={n} onClick={()=>setScores(s=>({...s,[k]:n}))}>★</button>)}</div></div>)}<textarea value={comment} onChange={e=>setComment(e.target.value)} placeholder="ความคิดเห็นเพิ่มเติม (ไม่บังคับ)"/><button className="btn primary wide" onClick={send}>ส่งแบบประเมิน</button></div>
+  const labels=lang==='th'
+    ?{taste:'รสชาติอาหาร',freshness:'ความสด',service:'การบริการ',cleanliness:'ความสะอาด',value:'ความคุ้มค่า',overall:'โดยรวม'}
+    :{taste:'Taste',freshness:'Freshness',service:'Service',cleanliness:'Cleanliness',value:'Value',overall:'Overall'}
+  if(done)return <section className="section page"><div className="wrap narrow"><div className="empty"><div className="big-ok">✓</div><h2>{t(lang,'ขอบคุณสำหรับความคิดเห็น','Thank you for your feedback')}</h2><p>{t(lang,'หวังว่าจะได้ต้อนรับคุณอีกครั้งที่ชาบูอร่อยจัง','We hope to welcome you back to Shabu Aroi Jang soon.')}</p><Link className="btn primary" to="/">{t(lang,'กลับหน้าแรก','Back to home')}</Link></div></div></section>
+  return <section className="section page"><div className="wrap narrow"><div className="page-head center"><span className="eyebrow">THANK YOU • TABLE {table}</span><h1>{t(lang,'ประเมินความพึงพอใจ','Rate your experience')}</h1><p>{t(lang,'ช่วยให้เราพัฒนาร้านให้ดีขึ้นในครั้งต่อไป','Your feedback helps us make your next visit even better.')}</p></div>
+    <div className="review-card">{Object.entries(labels).map(([k,l])=><div className="rating-row" key={k}><b>{l}</b><div>{[1,2,3,4,5].map(n=><button className={n<=scores[k]?'on':''} key={n} onClick={()=>setScores(s=>({...s,[k]:n}))}>★</button>)}</div></div>)}<textarea value={comment} onChange={e=>setComment(e.target.value)} placeholder={t(lang,'ความคิดเห็นเพิ่มเติม (ไม่บังคับ)','Additional comments (optional)')}/><button className="btn primary wide" onClick={send}>{t(lang,'ส่งแบบประเมิน','Submit review')}</button></div>
   </div></section>
 }
 
@@ -569,7 +578,7 @@ export default function App(){
     <Route path="/reserve" element={<CustomerShell lang={lang} setLang={setLang} settings={settings}><ReservePage settings={settings} lang={lang}/></CustomerShell>}/>
     <Route path="/reservation" element={<CustomerShell lang={lang} setLang={setLang} settings={settings}><ReservationPage lang={lang}/></CustomerShell>}/>
     <Route path="/chat" element={<CustomerShell lang={lang} setLang={setLang} settings={settings}><ChatPage lang={lang}/></CustomerShell>}/>
-    <Route path="/table/:token" element={<TablePage/>}/>
+    <Route path="/table/:token" element={<TablePage lang={lang} setLang={setLang}/>}/>
     <Route path="/admin/login" element={adminSession?<Navigate to="/admin/dashboard" replace/>:<AdminLogin onLogin={onAdminLogin}/>}/>
     <Route path="/admin/dashboard" element={admin(<Dashboard/>,['owner','manager','cashier','kitchen','staff'])}/>
     <Route path="/admin/reservations" element={admin(<ReservationsAdmin/>,['owner','manager','cashier','staff'])}/>
