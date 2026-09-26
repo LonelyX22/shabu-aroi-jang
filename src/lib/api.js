@@ -195,19 +195,39 @@ export function subscribeAll(cb){
 
 
 export async function askAi(message){
+  const context=await getAiContext().catch(()=>({settings:null,menu:[],promotions:[],knowledge:[]}))
   const fallback = () => {
     const q=String(message||'').toLowerCase()
-    if(q.includes('ราคา')||q.includes('price')) return 'บุฟเฟ่ต์ผู้ใหญ่ 299 บาท/คน รวมน้ำและเป็นราคา NET ครับ'
-    if(q.includes('เปิด')||q.includes('เวลา')||q.includes('hour')) return 'ร้านเปิด 11:00–22:00 น. ทุกวันครับ'
-    if(q.includes('ที่อยู่')||q.includes('อยู่ไหน')||q.includes('location')) return 'ร้านอยู่ที่ 125/3 ม.5 ต.สามควายเผือก อ.เมือง จ.นครปฐม 73000 ครับ'
+    const s=context.settings||{}
+    for(const k of context.knowledge||[]){
+      const hay=`${k.question} ${(k.keywords||[]).join(' ')}`.toLowerCase()
+      if((k.keywords||[]).some(w=>q.includes(String(w).toLowerCase())) || hay.includes(q)) return k.answer
+    }
+    if(q.includes('ราคา')||q.includes('price')) return `บุฟเฟ่ต์ผู้ใหญ่ ${Number(s.buffet_price||299)} บาท/คน เด็ก ${Number(s.child_price||149)} บาท รวมน้ำครับ`
+    if(q.includes('เปิด')||q.includes('เวลา')||q.includes('hour')) return `ร้านเปิด ${String(s.open_time||'11:00').slice(0,5)}–${String(s.close_time||'22:00').slice(0,5)} น. ครับ`
+    if(q.includes('ที่อยู่')||q.includes('อยู่ไหน')||q.includes('location')) return `ร้านอยู่ที่ ${s.address_th||'125/3 ม.5 ต.สามควายเผือก อ.เมือง จ.นครปฐม 73000'} ครับ`
+    if(q.includes('โปร')||q.includes('coupon')||q.includes('promotion')){
+      const p=(context.promotions||[]).filter(x=>x.is_active).slice(0,5)
+      return p.length?`โปรโมชั่นตอนนี้: ${p.map(x=>`${x.code} - ${x.name}`).join(', ')}`:'ตอนนี้ยังไม่มีโปรโมชั่นที่เปิดใช้งานครับ'
+    }
+    if(q.includes('เมนู')||q.includes('menu')){
+      const names=(context.menu||[]).slice(0,12).map(x=>x.name_th)
+      return names.length?`ตัวอย่างเมนู: ${names.join(', ')} และยังมีเมนูอื่นอีกครับ`:'กำลังอัปเดตข้อมูลเมนูครับ'
+    }
     if(q.includes('จอง')) return 'กดเมนู “จองโต๊ะ” กรอกชื่อ เบอร์ วันที่ เวลา และจำนวนคน จากนั้นรอร้านยืนยันโต๊ะครับ'
-    if(q.includes('เด็ก')) return 'เด็กต่ำกว่า 90 ซม. ฟรี, 90–120 ซม. 149 บาท และสูงกว่า 120 ซม. คิดราคา 299 บาทครับ'
-    if(q.includes('prompt')||q.includes('พร้อมเพย์')||q.includes('จ่าย')) return 'รองรับเงินสดและ PromptPay เบอร์ 06-1564-0529 ครับ'
-    return 'สอบถามได้เลยครับ เช่น ราคา เวลาเปิด เมนู ที่ตั้ง การจองโต๊ะ หรือวิธีชำระเงิน'
+    if(q.includes('เด็ก')) return `เด็กต่ำกว่า ${Number(s.free_child_height_cm||90)} ซม. ฟรี, ไม่เกิน ${Number(s.child_max_height_cm||120)} ซม. ${Number(s.child_price||149)} บาทครับ`
+    if(q.includes('prompt')||q.includes('พร้อมเพย์')||q.includes('จ่าย')) return `รองรับเงินสด PromptPay ${s.promptpay||'06-1564-0529'} และโอนธนาคารครับ`
+    return 'สอบถามได้เลยครับ เช่น ราคา เวลาเปิด เมนู โปรโมชั่น ที่ตั้ง การจองโต๊ะ หรือวิธีชำระเงิน'
   }
   if(!supabaseConfigured) return fallback()
   try {
-    const {data,error}=await supabase.functions.invoke('ai-chat',{body:{message}})
+    const compact={
+      settings:context.settings,
+      menu:(context.menu||[]).slice(0,120).map(x=>({name_th:x.name_th,name_en:x.name_en,category:x.category,extra_price:x.extra_price,is_premium:x.is_premium})),
+      promotions:(context.promotions||[]).filter(x=>x.is_active),
+      knowledge:(context.knowledge||[]).filter(x=>x.is_active)
+    }
+    const {data,error}=await supabase.functions.invoke('ai-chat',{body:{message,context:compact}})
     if(error) throw error
     const answer=data?.answer || fallback()
     try{
