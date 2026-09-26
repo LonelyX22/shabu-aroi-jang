@@ -294,8 +294,15 @@ export async function openWalkin(tableId,adultCount,childCount=0,freeChildCount=
 }
 export async function listActiveSessions(){
   if(!supabaseConfigured) return getDemo().sessions.filter(s=>s.status!=='closed')
-  const {data,error}=await supabase.from('table_sessions').select('*, restaurant_tables(code,seats)').in('status',['reserved','active','billing']).order('created_at',{ascending:false}); noerr(error)
-  return (data||[]).map(s=>({...s,table_code:s.restaurant_tables?.code,table_seats:s.restaurant_tables?.seats}))
+  const {data,error}=await supabase.from('table_sessions')
+    .select('*, restaurant_tables(code,seats), table_session_tables(table_id,is_primary,restaurant_tables(code,seats,status))')
+    .in('status',['reserved','active','billing']).order('created_at',{ascending:false}); noerr(error)
+  return (data||[]).map(s=>({
+    ...s,
+    table_code:s.restaurant_tables?.code,
+    table_seats:s.restaurant_tables?.seats,
+    linked_tables:(s.table_session_tables||[]).map(x=>({...x,code:x.restaurant_tables?.code,seats:x.restaurant_tables?.seats,status:x.restaurant_tables?.status}))
+  }))
 }
 export async function moveTableSession(sessionId,newTableId){
   const {data,error}=await supabase.rpc('move_table_session',{p_session_id:sessionId,p_new_table_id:newTableId}); noerr(error); return data
@@ -314,24 +321,37 @@ export async function expireReservations(){
 }
 export async function listCustomers(){
   if(!supabaseConfigured) return []
-  const {data,error}=await supabase.from('reservations').select('customer_name,customer_phone,created_at,status,guest_count').order('created_at',{ascending:false}); noerr(error)
+  const [{data:reservations,error:e1},{data:sessions,error:e2}]=await Promise.all([
+    supabase.from('reservations').select('id,customer_name,customer_phone,created_at,status,guest_count,reservation_date,reservation_time').order('created_at',{ascending:false}),
+    supabase.from('table_sessions').select('id,reservation_id,bills(total,status,paid_at),reviews(overall,comment,created_at)')
+  ])
+  noerr(e1);noerr(e2)
+  const byReservation=new Map((sessions||[]).map(s=>[s.reservation_id,s]))
   const map=new Map()
-  for(const r of data||[]){
+  for(const r of reservations||[]){
     const k=r.customer_phone
-    const x=map.get(k)||{customer_phone:k,customer_name:r.customer_name,visits:0,reservations:0,total_guests:0,last_seen:r.created_at}
-    x.reservations++;x.total_guests+=Number(r.guest_count||0);if(r.status==='confirmed')x.visits++;if(new Date(r.created_at)>new Date(x.last_seen))x.last_seen=r.created_at
+    const x=map.get(k)||{customer_phone:k,customer_name:r.customer_name,visits:0,reservations:0,total_guests:0,total_spend:0,last_seen:r.created_at,history:[],reviews:[]}
+    x.reservations++;x.total_guests+=Number(r.guest_count||0)
+    const s=byReservation.get(r.id)
+    const paid=(s?.bills||[]).filter(b=>b.status==='paid')
+    if(paid.length)x.visits++
+    x.total_spend+=paid.reduce((sum,b)=>sum+Number(b.total||0),0)
+    x.history.push({...r,total:paid.reduce((sum,b)=>sum+Number(b.total||0),0)})
+    x.reviews.push(...(s?.reviews||[]))
+    if(new Date(r.created_at)>new Date(x.last_seen))x.last_seen=r.created_at
     map.set(k,x)
   }
   return [...map.values()].sort((a,b)=>new Date(b.last_seen)-new Date(a.last_seen))
 }
 export async function getReports(){
-  if(!supabaseConfigured) return {bills:[],orders:[],reviews:[]}
-  const [{data:bills,error:e1},{data:orders,error:e2},{data:reviews,error:e3}]=await Promise.all([
-    supabase.from('bills').select('*').eq('status','paid').order('paid_at',{ascending:false}),
-    supabase.from('food_orders').select('id,status,created_at,food_order_items(item_name_th,quantity)').order('created_at',{ascending:false}),
-    supabase.from('reviews').select('*').order('created_at',{ascending:false})
+  if(!supabaseConfigured) return {bills:[],orders:[],reviews:[],sessions:[]}
+  const [{data:bills,error:e1},{data:orders,error:e2},{data:reviews,error:e3},{data:sessions,error:e4}]=await Promise.all([
+    supabase.from('bills').select('*, table_sessions(started_at,closed_at,restaurant_tables(code))').eq('status','paid').order('paid_at',{ascending:false}),
+    supabase.from('food_orders').select('id,status,created_at,served_at,food_order_items(item_name_th,quantity,station)').order('created_at',{ascending:false}),
+    supabase.from('reviews').select('*').order('created_at',{ascending:false}),
+    supabase.from('table_sessions').select('id,started_at,closed_at,guest_count,restaurant_tables(code)').not('closed_at','is',null).order('closed_at',{ascending:false})
   ])
-  noerr(e1);noerr(e2);noerr(e3);return {bills:bills||[],orders:orders||[],reviews:reviews||[]}
+  noerr(e1);noerr(e2);noerr(e3);noerr(e4);return {bills:bills||[],orders:orders||[],reviews:reviews||[],sessions:sessions||[]}
 }
 
 
