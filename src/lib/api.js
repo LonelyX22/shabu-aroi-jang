@@ -334,3 +334,16 @@ export async function updateReservationAdmin(id,payload){
   if(!supabaseConfigured) return mutate(db=>{const r=db.reservations.find(x=>x.id===id);if(!r)throw new Error('ไม่พบการจอง');Object.assign(r,payload);return r})
   const {data,error}=await supabase.from('reservations').update(payload).eq('id',id).select().single(); noerr(error); return data
 }
+
+
+export async function cancelReservationAdmin(id){
+  if(!supabaseConfigured) return mutate(db=>{
+    const r=db.reservations.find(x=>x.id===id);if(!r)throw new Error('ไม่พบการจอง')
+    const s=db.sessions.find(x=>x.reservation_id===id&&['reserved','active','billing'].includes(x.status))
+    if(s&&['active','billing'].includes(s.status))throw new Error('ลูกค้าเริ่มใช้โต๊ะแล้ว')
+    r.status='cancelled'
+    if(s){s.status='cancelled';const t=db.tables.find(x=>x.id===s.table_id);if(t)t.status='available'}
+    return r
+  })
+  const {data,error}=await supabase.rpc('cancel_reservation_admin',{p_reservation_id:id}); noerr(error); return data
+}
