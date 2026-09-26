@@ -372,42 +372,182 @@ export function subscribeAll(cb){
 }
 
 
-export async function askAi(message){
+export async function askAi(message,history=[],lang='th'){
   const context=await getAiContext().catch(()=>({settings:null,menu:[],promotions:[],knowledge:[]}))
+  const cleanHistory=(Array.isArray(history)?history:[])
+    .filter(x=>x&&['user','assistant','bot'].includes(x.role)&&String(x.text||x.content||'').trim())
+    .slice(-16)
+    .map(x=>({
+      role:x.role==='bot'?'assistant':x.role,
+      content:String(x.text||x.content||'').slice(0,1200)
+    }))
+
   const fallback = () => {
-    const q=String(message||'').toLowerCase()
+    const q=String(message||'').trim()
+    const lower=q.toLowerCase()
     const s=context.settings||{}
+    const adult=Number(s.buffet_price||299)
+    const child=Number(s.child_price||149)
+    const freeHeight=Number(s.free_child_height_cm||90)
+    const childMax=Number(s.child_max_height_cm||120)
+    const open=String(s.open_time||'11:00').slice(0,5)
+    const close=String(s.close_time||'22:00').slice(0,5)
+
+    const recentUser=[...cleanHistory.filter(x=>x.role==='user').map(x=>x.content),q].slice(-8)
+    const transcript=recentUser.join(' ').toLowerCase()
+    const thai=lang!=='en' && !/\b(hello|hi|price|menu|open|hour|location|reserve|child|recommend|thanks?)\b/i.test(q)
+
+    const reply=(th,en)=>thai?th:en
+
+    if(/^(สวัสดี|หวัดดี|ดีครับ|ดีค่ะ|hello|hi|hey)[! .]*$/i.test(q)){
+      return reply(
+        'สวัสดีครับ 😊 วันนี้ให้ผมช่วยเรื่องเมนู ราคา จองโต๊ะ หรือช่วยคำนวณราคาสำหรับกลุ่มของคุณได้เลยครับ',
+        'Hi 😊 I can help with the menu, prices, reservations, or estimate the total for your group.'
+      )
+    }
+    if(/ขอบคุณ|thank|thx/i.test(q)){
+      return reply('ยินดีครับ 😊 ถ้ามีอะไรอยากถามต่อ ถามผมได้เลยครับ','You’re welcome 😊 Ask me anything else about the restaurant.')
+    }
+
     for(const k of context.knowledge||[]){
-      const hay=`${k.question} ${(k.keywords||[]).join(' ')}`.toLowerCase()
-      if((k.keywords||[]).some(w=>q.includes(String(w).toLowerCase())) || hay.includes(q)) return k.answer
+      const keywords=(k.keywords||[]).map(String)
+      const hay=`${k.question||''} ${keywords.join(' ')}`.toLowerCase()
+      if(keywords.some(w=>lower.includes(w.toLowerCase())) || (q.length>4&&hay.includes(lower))) return k.answer
     }
-    if(q.includes('ราคา')||q.includes('price')) return `บุฟเฟ่ต์ผู้ใหญ่ ${Number(s.buffet_price||299)} บาท/คน เด็ก ${Number(s.child_price||149)} บาท รวมน้ำครับ`
-    if(q.includes('เปิด')||q.includes('เวลา')||q.includes('hour')) return `ร้านเปิด ${String(s.open_time||'11:00').slice(0,5)}–${String(s.close_time||'22:00').slice(0,5)} น. ครับ`
-    if(q.includes('ที่อยู่')||q.includes('อยู่ไหน')||q.includes('location')) return `ร้านอยู่ที่ ${s.address_th||'125/3 ม.5 ต.สามควายเผือก อ.เมือง จ.นครปฐม 73000'} ครับ`
-    if(q.includes('โปร')||q.includes('coupon')||q.includes('promotion')){
+
+    const allNums=(transcript.match(/\d+(?:\.\d+)?/g)||[]).map(Number)
+    const heightMatch=q.match(/(?:สูง|height)?\s*(\d{2,3})\s*(?:ซม|cm)?/i)
+    const mentionsChild=/เด็ก|child|kid/i.test(transcript)
+    const mentionsPeople=/คน|people|persons?|guests?/i.test(transcript)
+
+    if(mentionsChild && heightMatch){
+      const h=Number(heightMatch[1])
+      const childPrice=h<freeHeight?0:h<=childMax?child:adult
+      return reply(
+        h<freeHeight
+          ? `เด็กสูง ${h} ซม. ทานฟรีครับ เพราะต่ำกว่า ${freeHeight} ซม. ถ้าบอกจำนวนผู้ใหญ่กับเด็กทั้งหมด ผมคำนวณยอดรวมให้ได้ครับ`
+          : h<=childMax
+            ? `เด็กสูง ${h} ซม. อยู่ในช่วงราคาเด็ก ${child} บาทครับ ถ้าบอกว่ามาทั้งหมดกี่คนและมีเด็กกี่คน ผมคำนวณยอดรวมให้ได้ครับ`
+            : `เด็กสูง ${h} ซม. เกิน ${childMax} ซม. คิดราคาผู้ใหญ่ ${adult} บาทครับ`,
+        h<freeHeight
+          ? `A child who is ${h} cm tall eats free because they are under ${freeHeight} cm. Tell me your full party size and I can calculate the total.`
+          : h<=childMax
+            ? `A child who is ${h} cm tall is ${child} THB. Tell me your total party size and number of children and I can calculate the total.`
+            : `At ${h} cm, the adult price of ${adult} THB applies.`
+      )
+    }
+
+    const totalMatch=transcript.match(/(?:ทั้งหมด|มากัน|มา\s*|total|party(?: of)?|we are)\s*(\d{1,2})\s*(?:คน|people|persons?|guests?)?/i)
+    const childCountMatch=transcript.match(/(?:เด็ก|child(?:ren)?|kids?)\s*(\d{1,2})\s*(?:คน)?/i)
+    if(totalMatch&&childCountMatch){
+      const total=Number(totalMatch[1]), kids=Number(childCountMatch[1])
+      const adults=Math.max(0,total-kids)
+      const recentHeight=(transcript.match(/(?:สูง|height)?\s*(\d{2,3})\s*(?:ซม|cm)/ig)||[]).pop()
+      const h=recentHeight?Number((recentHeight.match(/\d+/)||[])[0]):null
+      if(kids>0&&!h){
+        return reply(
+          `มาทั้งหมด ${total} คน มีเด็ก ${kids} คน ได้ครับ เด็กสูงประมาณกี่ซม.ครับ? ผมจะคำนวณราคาให้ตรงตามเรตเด็กของร้าน`,
+          `Got it: ${total} guests with ${kids} child${kids>1?'ren':''}. About how tall ${kids>1?'are the children':'is the child'}? I’ll calculate the correct child rate.`
+        )
+      }
+      const kidRate=h==null?child:(h<freeHeight?0:h<=childMax?child:adult)
+      const totalPrice=adults*adult+kids*kidRate
+      return reply(
+        `ถ้ามาทั้งหมด ${total} คน เป็นผู้ใหญ่ ${adults} คน และเด็ก ${kids} คน${h?` สูงประมาณ ${h} ซม.`:''} รวมประมาณ ${totalPrice.toLocaleString('th-TH')} บาทครับ (ผู้ใหญ่ ${adult} บาท/คน${kids?`, เด็กเรต ${kidRate} บาท/คน`:''})`,
+        `For ${total} guests — ${adults} adult${adults===1?'':'s'} and ${kids} child${kids===1?'':'ren'} — the estimated total is ${totalPrice.toLocaleString('en-US')} THB.`
+      )
+    }
+
+    if(/ราคา|เท่าไหร่|price|cost|บาท/i.test(lower)){
+      return reply(
+        `บุฟเฟ่ต์ผู้ใหญ่ ${adult} บาท/คน รวมน้ำและเป็นราคา NET ครับ เด็กต่ำกว่า ${freeHeight} ซม. ฟรี และ ${freeHeight}–${childMax} ซม. ${child} บาทครับ`,
+        `Adult buffet is ${adult} THB per person, drinks included, NET. Children under ${freeHeight} cm are free; ${freeHeight}–${childMax} cm are ${child} THB.`
+      )
+    }
+
+    if(/เปิด|ปิด|กี่โมง|เวลา|hour|open|close/i.test(lower)){
+      return reply(`ร้านเปิด ${open}–${close} น. ครับ เวลาทาน ${Number(s.dining_minutes||120)} นาที`,`We’re open ${open}–${close}. Dining time is ${Number(s.dining_minutes||120)} minutes.`)
+    }
+
+    if(/ที่อยู่|อยู่ไหน|location|address|map/i.test(lower)){
+      return reply(`ร้านอยู่ที่ ${s.address_th||'125/3 ม.5 ต.สามควายเผือก อ.เมือง จ.นครปฐม 73000'} ครับ`,`We’re at ${s.address_th||'125/3 Moo 5, Sam Khwai Phueak, Mueang Nakhon Pathom, Nakhon Pathom 73000'}.`)
+    }
+
+    if(/โปร|coupon|promotion|ส่วนลด/i.test(lower)){
       const p=(context.promotions||[]).filter(x=>x.is_active).slice(0,5)
-      return p.length?`โปรโมชั่นตอนนี้: ${p.map(x=>`${x.code} - ${x.name}`).join(', ')}`:'ตอนนี้ยังไม่มีโปรโมชั่นที่เปิดใช้งานครับ'
+      return p.length
+        ? reply(`โปรโมชั่นตอนนี้มี ${p.map(x=>`${x.code} — ${x.name}`).join(', ')} ครับ`,`Current promotions: ${p.map(x=>`${x.code} — ${x.name}`).join(', ')}.`)
+        : reply('ตอนนี้ยังไม่มีโปรโมชั่นที่เปิดใช้งานครับ','There are no active promotions right now.')
     }
-    if(q.includes('เมนู')||q.includes('menu')){
-      const names=(context.menu||[]).slice(0,12).map(x=>x.name_th)
-      return names.length?`ตัวอย่างเมนู: ${names.join(', ')} และยังมีเมนูอื่นอีกครับ`:'กำลังอัปเดตข้อมูลเมนูครับ'
+
+    const categoryWords=[
+      ['เนื้อ','Beef'],['หมู','Pork'],['ไก่','Chicken'],['ซีฟู้ด','Seafood'],['กุ้ง','Seafood'],
+      ['ผัก','Vegetables'],['เห็ด','Mushrooms'],['ของหวาน','Dessert'],['เครื่องดื่ม','Drinks'],['น้ำซุป','Soup']
+    ]
+    const foundCategory=categoryWords.find(([th,en])=>lower.includes(th)||lower.includes(en.toLowerCase()))
+    if(foundCategory){
+      const [thCat,enCat]=foundCategory
+      const matched=(context.menu||[]).filter(x=>{
+        const hay=`${x.category||''} ${x.name_th||''} ${x.name_en||''}`.toLowerCase()
+        return hay.includes(thCat.toLowerCase())||hay.includes(enCat.toLowerCase())
+      }).slice(0,10)
+      if(matched.length){
+        const names=matched.map(x=>thai?(x.name_th||x.name_en):(x.name_en||x.name_th))
+        return reply(`มีครับ เช่น ${names.join(', ')} ครับ อยากให้ผมช่วยเลือกแบบไหนเป็นพิเศษไหมครับ`,`Yes — for example: ${names.join(', ')}. Want me to recommend a few based on what you like?`)
+      }
     }
-    if(q.includes('จอง')) return 'กดเมนู “จองโต๊ะ” กรอกชื่อ เบอร์ วันที่ เวลา และจำนวนคน จากนั้นรอร้านยืนยันโต๊ะครับ'
-    if(q.includes('เด็ก')) return `เด็กต่ำกว่า ${Number(s.free_child_height_cm||90)} ซม. ฟรี, ไม่เกิน ${Number(s.child_max_height_cm||120)} ซม. ${Number(s.child_price||149)} บาทครับ`
-    if(q.includes('prompt')||q.includes('พร้อมเพย์')||q.includes('จ่าย')) return `รองรับเงินสด PromptPay ${s.promptpay||'06-1564-0529'} และโอนธนาคารครับ`
-    return 'สอบถามได้เลยครับ เช่น ราคา เวลาเปิด เมนู โปรโมชั่น ที่ตั้ง การจองโต๊ะ หรือวิธีชำระเงิน'
+
+    if(/แนะนำ|กินอะไร|recommend|suggest|อร่อยอะไร/i.test(lower)){
+      const sample=(context.menu||[]).filter(x=>!x.is_premium).slice(0,8)
+      const names=sample.map(x=>thai?(x.name_th||x.name_en):(x.name_en||x.name_th))
+      return names.length
+        ? reply(`ถ้าเลือกไม่ถูก ผมแนะนำเริ่มจาก ${names.slice(0,5).join(', ')} ก่อนครับ แล้วบอกผมได้ว่าชอบหมู เนื้อ ซีฟู้ด หรือเผ็ด ผมจะเลือกให้ตรงขึ้นครับ`,`A good start is ${names.slice(0,5).join(', ')}. Tell me if you prefer pork, beef, seafood, or spicy food and I’ll narrow it down.`)
+        : reply('บอกผมได้ว่าชอบหมู เนื้อ ซีฟู้ด หรืออาหารเผ็ด เดี๋ยวผมช่วยเลือกให้ครับ','Tell me whether you prefer pork, beef, seafood, or spicy food and I’ll help you choose.')
+    }
+
+    if(/เมนู|menu|มีอะไร/i.test(lower)){
+      const names=(context.menu||[]).slice(0,12).map(x=>thai?(x.name_th||x.name_en):(x.name_en||x.name_th))
+      return names.length
+        ? reply(`มีหลายหมวดครับ ตัวอย่างเช่น ${names.join(', ')} และยังมีเมนูอื่นอีกครับ ถ้าบอกว่าชอบอะไร ผมช่วยคัดให้ได้ครับ`,`We have many categories. Examples include ${names.join(', ')}. Tell me what you like and I can narrow it down.`)
+        : reply('กำลังอัปเดตข้อมูลเมนูครับ','The menu is being updated right now.')
+    }
+
+    if(/จอง|reserve|booking/i.test(lower)){
+      return reply('จองได้ครับ กดเมนู “จองโต๊ะ” แล้วกรอกชื่อ เบอร์ วันที่ เวลา และจำนวนคน จากนั้นร้านจะยืนยันโต๊ะให้ครับ','You can reserve from the “Reserve” page. Enter your name, phone, date, time and party size, then the restaurant will confirm your table.')
+    }
+
+    if(/เด็ก|child|kid/i.test(lower)){
+      return reply(`เด็กต่ำกว่า ${freeHeight} ซม. ฟรี, ${freeHeight}–${childMax} ซม. ${child} บาท และเกิน ${childMax} ซม. คิดราคาผู้ใหญ่ ${adult} บาทครับ เด็กสูงประมาณเท่าไหร่ครับ?`,`Children under ${freeHeight} cm are free, ${freeHeight}–${childMax} cm are ${child} THB, and above ${childMax} cm pay the adult rate of ${adult} THB. About how tall is the child?`)
+    }
+
+    if(/prompt|พร้อมเพย์|จ่าย|ชำระ|payment|pay/i.test(lower)){
+      return reply(`รองรับ PromptPay ${s.promptpay||'06-1564-0529'} และช่องทางชำระเงินที่ร้านกำหนดครับ`,`PromptPay is available at ${s.promptpay||'06-1564-0529'}, along with the payment methods enabled by the restaurant.`)
+    }
+
+    return reply(
+      'ได้ครับ คุยกับผมได้ตามปกติเลย 😊 ผมช่วยเรื่องเมนู ราคาเด็ก คำนวณราคากลุ่ม โปรโมชั่น เวลาเปิดร้าน ที่ตั้ง และการจองโต๊ะได้ครับ',
+      'Sure — you can chat with me naturally 😊 I can help with the menu, child pricing, group estimates, promotions, opening hours, location and reservations.'
+    )
   }
+
   if(!supabaseConfigured) return fallback()
+
   try {
     const compact={
       settings:context.settings,
-      menu:(context.menu||[]).slice(0,120).map(x=>({name_th:x.name_th,name_en:x.name_en,category:x.category,extra_price:x.extra_price,is_premium:x.is_premium})),
-      promotions:(context.promotions||[]).filter(x=>x.is_active),
-      knowledge:(context.knowledge||[]).filter(x=>x.is_active)
+      menu:(context.menu||[]).slice(0,140).map(x=>({
+        name_th:x.name_th,name_en:x.name_en,category:x.category,
+        description_th:x.description_th,description_en:x.description_en,
+        extra_price:x.extra_price,is_premium:x.is_premium,is_available:x.is_available
+      })),
+      promotions:(context.promotions||[]).filter(x=>x.is_active).slice(0,20),
+      knowledge:(context.knowledge||[]).filter(x=>x.is_active).slice(0,80)
     }
-    const {data,error}=await supabase.functions.invoke('ai-chat',{body:{message,context:compact}})
+    const {data,error}=await supabase.functions.invoke('ai-chat',{
+      body:{message:String(message).slice(0,2000),history:cleanHistory,context:compact,lang}
+    })
     if(error) throw error
-    const answer=data?.answer || fallback()
+    const answer=String(data?.answer||'').trim() || fallback()
     try{
       const key=localStorage.getItem('shabu-chat-key')||crypto.randomUUID()
       localStorage.setItem('shabu-chat-key',key)
@@ -424,7 +564,6 @@ export async function askAi(message){
     return answer
   }
 }
-
 
 // ----- Production admin helpers -----
 export async function listCategories(){
