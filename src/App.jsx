@@ -117,7 +117,7 @@ function MenuPage({lang}) {
     <div className="page-head center"><span className="eyebrow">BUFFET MENU</span><h1>{t(lang,'เมนูชาบูของเรา','Our Shabu Menu')}</h1><p>รวมอยู่ใน Buffet 299 บาท เว้นแต่ร้านกำหนดเป็นเมนูพิเศษในอนาคต</p></div>
     <div className="menu-toolbar"><input value={q} onChange={e=>setQ(e.target.value)} placeholder={t(lang,'ค้นหาเมนู...','Search menu...')}/></div>
     <div className="chips">{cats.map(c=><button key={c} className={cat===c?'active':''} onClick={()=>setCat(c)}>{c}</button>)}</div>
-    <div className="menu-grid">{filtered.map(x=><article className="food-card" key={x.id}><div className="food-emoji">{x.emoji||'🍲'}</div><div><small>{x.category}</small><h3>{lang==='th'?x.name_th:x.name_en}</h3><span>{x.is_available!==false?'พร้อมเสิร์ฟ':'หมดชั่วคราว'}</span></div></article>)}</div>
+    <div className="menu-grid">{filtered.map(x=><article className="food-card" key={x.id}><div className="food-emoji">{x.emoji||'🍲'}</div><div><small>{x.category}{x.is_premium?' • PREMIUM':''}</small><h3>{lang==='th'?x.name_th:x.name_en}</h3><span>{x.is_available!==false?'พร้อมเสิร์ฟ':'หมดชั่วคราว'}{Number(x.extra_price||0)>0?` • +${money(x.extra_price)}`:''}</span></div></article>)}</div>
   </div></section>
 }
 
@@ -203,6 +203,7 @@ function TablePage() {
   const qty=(id)=>cart[id]||0
   const add=(id,d)=>setCart(c=>({...c,[id]:Math.max(0,(c[id]||0)+d)}))
   const totalItems=Object.values(cart).reduce((a,b)=>a+b,0)
+  const extraTotal=menu.reduce((sum,x)=>sum+Number(x.extra_price||0)*qty(x.id),0)
   async function submit(){
     const selected=menu.filter(x=>qty(x.id)>0).map(x=>({menu_item_id:x.id,quantity:qty(x.id),name_th:x.name_th,name_en:x.name_en}))
     if(!selected.length)return
@@ -221,8 +222,8 @@ function TablePage() {
     <div className="table-content" id="order-menu">
       <div className="table-title"><div><span className="eyebrow">UNLIMITED MENU</span><h1>อยากทานอะไรเพิ่ม?</h1></div><div className="cart-count">{totalItems} รายการ</div></div>
       <div className="chips horizontal">{cats.map(c=><button key={c} className={cat===c?'active':''} onClick={()=>setCat(c)}>{c}</button>)}</div>
-      <div className="order-menu-grid">{items.map(x=><div className="order-menu-card" key={x.id}><div className="food-emoji small">{x.emoji||'🍲'}</div><div className="food-copy"><small>{x.category}</small><b>{x.name_th}</b></div><div className="stepper"><button onClick={()=>add(x.id,-1)}>−</button><strong>{qty(x.id)}</strong><button onClick={()=>add(x.id,1)}>+</button></div></div>)}</div>
-      {totalItems>0&&<div className="sticky-submit"><span><b>{totalItems}</b> รายการที่เลือก</span><button className="btn primary" onClick={submit}>ยืนยันและส่งเข้าครัว →</button></div>}
+      <div className="order-menu-grid">{items.map(x=><div className="order-menu-card" key={x.id}><div className="food-emoji small">{x.emoji||'🍲'}</div><div className="food-copy"><small>{x.category}{x.is_premium?' • PREMIUM':''}</small><b>{x.name_th}</b>{Number(x.extra_price||0)>0&&<em className="extra-price">+${money(x.extra_price)}</em>}</div><div className="stepper"><button onClick={()=>add(x.id,-1)}>−</button><strong>{qty(x.id)}</strong><button onClick={()=>add(x.id,1)}>+</button></div></div>)}</div>
+      {totalItems>0&&<div className="sticky-submit"><span><b>{totalItems}</b> รายการที่เลือก{extraTotal>0&&<small> • เพิ่ม {money(extraTotal)}</small>}</span><button className="btn primary" onClick={submit}>ยืนยันและส่งเข้าครัว →</button></div>}
       <div className="quick-service"><h2>เรียกพนักงาน</h2><div>{[['soup','🍲 เติมน้ำซุป'],['plates','🍽 ขอจานเพิ่ม'],['sauce','🥣 ขอน้ำจิ้ม'],['cleanup','🧹 เก็บจาน'],['staff','🔔 เรียกพนักงาน']].map(([v,l])=><button key={v} onClick={()=>service(v)}>{l}</button>)}</div></div>
       <div id="my-orders" className="my-orders"><h2>รายการที่สั่ง</h2>{orders.length===0?<p className="muted">ยังไม่มีรายการที่สั่ง</p>:orders.map(o=><article key={o.id}><div><small>{dateTime(o.created_at)}</small><h3>{o.order_number}</h3></div><Status value={o.status}/><ul>{(o.items||o.food_order_items||[]).map((i,k)=><li key={i.id||k}>{i.name_th||i.item_name_th||'เมนู'} × {i.quantity}</li>)}</ul></article>)}</div>
     </div>
