@@ -105,6 +105,9 @@ drop policy if exists tables_admin_all on public.restaurant_tables;
 create policy tables_admin_all on public.restaurant_tables for all to authenticated
 using(public.has_role(array['owner','manager','cashier','staff']))
 with check(public.has_role(array['owner','manager','cashier','staff']));
+drop policy if exists tables_staff_read on public.restaurant_tables;
+create policy tables_staff_read on public.restaurant_tables for select to authenticated
+using(public.has_role(array['owner','manager','cashier','kitchen','staff']));
 
 drop policy if exists reservations_admin_all on public.reservations;
 create policy reservations_admin_all on public.reservations for all to authenticated
@@ -425,6 +428,40 @@ begin
 end;
 $$;
 
+
+create or replace function public.cancel_reservation_admin(p_reservation_id uuid)
+returns jsonb
+language plpgsql security definer set search_path=public
+as $
+declare
+  r public.reservations%rowtype;
+  s public.table_sessions%rowtype;
+begin
+  if not public.has_role(array['owner','manager','cashier','staff']) then raise exception 'Unauthorized'; end if;
+  select * into r from public.reservations where id=p_reservation_id for update;
+  if not found then raise exception 'ไม่พบการจอง'; end if;
+
+  select * into s from public.table_sessions
+  where reservation_id=r.id and status in ('reserved','active','billing')
+  order by created_at desc limit 1 for update;
+
+  if found and s.status in ('active','billing') then
+    raise exception 'ลูกค้าเริ่มใช้โต๊ะแล้ว กรุณาจัดการจากระบบโต๊ะ/เช็คบิล';
+  end if;
+
+  update public.reservations set status='cancelled' where id=r.id;
+  if found then
+    update public.table_sessions set status='cancelled',closed_at=now() where id=s.id;
+    update public.restaurant_tables set status='available' where id=s.table_id;
+  elsif r.table_id is not null then
+    update public.restaurant_tables set status='available' where id=r.table_id and status='reserved';
+  end if;
+
+  perform public.log_audit('cancel_reservation','reservation',r.id::text,jsonb_build_object('code',r.code));
+  return jsonb_build_object('id',r.id,'status','cancelled');
+end;
+$;
+
 create or replace function public.expire_old_reservations()
 returns integer
 language plpgsql security definer set search_path=public
@@ -444,6 +481,11 @@ begin
   )
   select count(*) into v_count from changed;
 
+  update public.table_sessions s
+  set status='cancelled',closed_at=now()
+  where s.status='reserved'
+    and exists(select 1 from public.reservations r where r.id=s.reservation_id and r.status='expired');
+
   update public.restaurant_tables t
   set status='available'
   where t.status='reserved'
@@ -457,6 +499,7 @@ grant execute on function public.open_walkin_session(uuid,integer,integer,intege
 grant execute on function public.move_table_session(uuid,uuid) to authenticated;
 grant execute on function public.update_bill_details(uuid,integer,integer,integer,numeric,text,text) to authenticated;
 grant execute on function public.expire_old_reservations() to authenticated;
+grant execute on function public.cancel_reservation_admin(uuid) to authenticated;
 grant execute on function public.log_audit(text,text,text,jsonb) to authenticated;
 
 do $$
