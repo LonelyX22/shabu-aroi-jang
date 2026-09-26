@@ -113,10 +113,10 @@ export function ReportsPage(){
 }
 
 export function CustomersPage(){
-  const [items,setItems]=useState([]),[q,setQ]=useState('')
+  const [items,setItems]=useState([]),[q,setQ]=useState(''),[detail,setDetail]=useState(null)
   useEffect(()=>{listCustomers().then(setItems)},[])
   const list=items.filter(x=>`${x.customer_name} ${x.customer_phone}`.toLowerCase().includes(q.toLowerCase()))
-  return <><Head eyebrow="CUSTOMERS" title="ลูกค้า" desc="สรุปจากประวัติการจอง"/><div className="admin-card"><input className="admin-search" placeholder="ค้นหาชื่อหรือเบอร์..." value={q} onChange={e=>setQ(e.target.value)}/><div className="table-scroll"><table><thead><tr><th>ลูกค้า</th><th>เบอร์</th><th>การจอง</th><th>ยืนยันแล้ว</th><th>รวมผู้มา</th><th>ล่าสุด</th></tr></thead><tbody>{list.map(x=><tr key={x.customer_phone}><td><b>{x.customer_name}</b></td><td>{x.customer_phone}</td><td>{x.reservations}</td><td>{x.visits}</td><td>{x.total_guests}</td><td>{dt(x.last_seen)}</td></tr>)}</tbody></table></div></div></>
+  return <><Head eyebrow="CUSTOMERS" title="ลูกค้า" desc="จำนวนครั้งที่มา ยอดใช้จ่าย Booking history และรีวิว"/><div className="admin-card"><input className="admin-search" placeholder="ค้นหาชื่อหรือเบอร์..." value={q} onChange={e=>setQ(e.target.value)}/><div className="table-scroll"><table><thead><tr><th>ลูกค้า</th><th>เบอร์</th><th>การจอง</th><th>มาใช้บริการ</th><th>ยอดใช้จ่าย</th><th>ล่าสุด</th><th></th></tr></thead><tbody>{list.map(x=><tr key={x.customer_phone}><td><b>{x.customer_name}</b></td><td>{x.customer_phone}</td><td>{x.reservations}</td><td>{x.visits}</td><td>{money(x.total_spend)}</td><td>{dt(x.last_seen)}</td><td><button className="mini-btn qr" onClick={()=>setDetail(x)}>ดูประวัติ</button></td></tr>)}</tbody></table></div></div>{detail&&<Modal title={`${detail.customer_name} • ${detail.customer_phone}`} onClose={()=>setDetail(null)}><div className="stat-grid mini-stats"><div className="stat-card"><span>🍲</span><div><small>มาใช้บริการ</small><b>{detail.visits}</b></div></div><div className="stat-card"><span>฿</span><div><small>ยอดรวม</small><b>{money(detail.total_spend)}</b></div></div></div><h3>ประวัติการจอง</h3><div className="simple-list">{detail.history.map(h=><div key={h.id}><span><b>{h.reservation_date} • {String(h.reservation_time||'').slice(0,5)}</b><small>{h.guest_count} คน • {h.status}</small></span><strong>{money(h.total||0)}</strong></div>)}</div><h3>รีวิวที่ผ่านมา</h3><div className="reviews-grid one-col">{detail.reviews.map((r,i)=><article key={i}><div className="stars">{'★'.repeat(Number(r.overall||0))}{'☆'.repeat(5-Number(r.overall||0))}</div><p>{r.comment||'ไม่มีความคิดเห็น'}</p><small>{dt(r.created_at)}</small></article>)}{!detail.reviews.length&&<p className="muted">ยังไม่มีรีวิว</p>}</div></Modal>}</>
 }
 
 export function StaffPage(){
@@ -150,8 +150,31 @@ export function ChatHistoryPage(){
   const [items,setItems]=useState([]),[q,setQ]=useState('')
   useEffect(()=>{listChatLogs().then(setItems)},[])
   const filtered=items.filter(x=>`${x.customer_message} ${x.assistant_message}`.toLowerCase().includes(q.toLowerCase()))
-  return <><Head eyebrow="AI CHAT HISTORY" title="ประวัติ AI Chat" desc="ดูคำถามที่ลูกค้าถามและคำตอบของระบบ"/><div className="admin-card"><input className="admin-search" placeholder="ค้นหาคำถาม..." value={q} onChange={e=>setQ(e.target.value)}/><div className="chat-history-list">{filtered.map(x=><article key={x.id}><div><small>{dt(x.created_at)}</small><b>ลูกค้า: {x.customer_message}</b></div><p>AI: {x.assistant_message||'-'}</p></article>)}</div>{!filtered.length&&<p className="muted">ยังไม่มีประวัติ AI Chat</p>}</div></>
+  const freq={}
+  items.forEach(x=>{const k=String(x.customer_message||'').trim().toLowerCase();if(k)freq[k]=(freq[k]||0)+1})
+  const popular=Object.entries(freq).sort((a,b)=>b[1]-a[1]).slice(0,8)
+  return <><Head eyebrow="AI CHAT HISTORY" title="ประวัติ AI Chat" desc="คำถามล่าสุดและคำถามยอดนิยม"/><div className="admin-grid two"><section className="admin-card"><h2>คำถามยอดนิยม</h2><div className="rank-list">{popular.map(([t,n],i)=><div key={t}><b>#{i+1}</b><span>{t}</span><strong>{n}</strong></div>)}</div></section><section className="admin-card"><input className="admin-search" placeholder="ค้นหาคำถาม..." value={q} onChange={e=>setQ(e.target.value)}/><div className="chat-history-list">{filtered.map(x=><article key={x.id}><div><small>{dt(x.created_at)}</small><b>ลูกค้า: {x.customer_message}</b></div><p>AI: {x.assistant_message||'-'}</p></article>)}</div>{!filtered.length&&<p className="muted">ยังไม่มีประวัติ AI Chat</p>}</section></div></>
 }
+
+export function KnowledgeBasePage(){
+  const [items,setItems]=useState([]),[edit,setEdit]=useState(null)
+  async function load(){setItems(await listKnowledgeBase())}
+  useEffect(()=>{load()},[])
+  async function save(e){e.preventDefault();const p={title:edit.title,content:edit.content,is_active:!!edit.is_active,sort_order:Number(edit.sort_order||items.length+1)};if(edit.id)await updateKnowledge(edit.id,p);else await createKnowledge(p);setEdit(null);await load()}
+  return <><Head eyebrow="AI KNOWLEDGE BASE" title="ความรู้สำหรับ AI" desc="เพิ่มข้อมูลร้านที่ AI ใช้ตอบลูกค้าแบบ Dynamic" action={<button className="btn primary" onClick={()=>setEdit({title:'',content:'',is_active:true,sort_order:items.length+1})}>+ เพิ่มข้อมูล</button>}/><div className="admin-card"><div className="simple-list">{items.map(x=><div key={x.id}><span><b>{x.title}</b><small>{x.content.slice(0,120)}{x.content.length>120?'…':''}</small></span><div><button onClick={()=>setEdit(x)}>แก้ไข</button><button className="danger-text" onClick={async()=>{if(confirm('ลบข้อมูลนี้?')){await deleteKnowledge(x.id);load()}}}>ลบ</button></div></div>)}</div></div>{edit&&<Modal title={edit.id?'แก้ Knowledge':'เพิ่ม Knowledge'} onClose={()=>setEdit(null)}><form className="pro-form" onSubmit={save}><label className="span-2">หัวข้อ<input required value={edit.title} onChange={e=>setEdit(x=>({...x,title:e.target.value}))}/></label><label className="span-2">ข้อมูล<textarea required rows="8" value={edit.content} onChange={e=>setEdit(x=>({...x,content:e.target.value}))}/></label><label>ลำดับ<input type="number" value={edit.sort_order} onChange={e=>setEdit(x=>({...x,sort_order:e.target.value}))}/></label><label className="check"><input type="checkbox" checked={!!edit.is_active} onChange={e=>setEdit(x=>({...x,is_active:e.target.checked}))}/> เปิดใช้งาน</label><button className="btn primary span-2">บันทึก</button></form></Modal>}</>
+}
+
+export function ReviewsAdvancedPage(){
+  const [items,setItems]=useState([]),[star,setStar]=useState('all')
+  async function load(){setItems(await listReviews())}
+  useEffect(()=>{load();return subscribeAll(load)},[])
+  const list=items.filter(x=>star==='all'||Number(x.overall)===Number(star))
+  const avg=(k)=>items.length?(items.reduce((s,x)=>s+Number(x[k]||0),0)/items.length).toFixed(2):'-'
+  function exportCsv(){const rows=[['date','overall','taste','freshness','service','cleanliness','value','comment','flagged'],...list.map(x=>[x.created_at,x.overall,x.taste,x.freshness,x.service,x.cleanliness,x.value,x.comment,x.is_flagged])];const csv=rows.map(r=>r.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));a.download='shabu-reviews.csv';a.click()}
+  return <><Head eyebrow="REVIEWS ANALYTICS" title="รีวิวลูกค้า" desc="กรองดาว วิเคราะห์รายหัวข้อ Export และติดตามรีวิวต่ำ" action={<button className="btn primary" onClick={exportCsv}>Export CSV</button>}/><div className="filter-row">{['all',5,4,3,2,1].map(v=><button className={String(star)===String(v)?'active':''} key={v} onClick={()=>setStar(v)}>{v==='all'?'ทั้งหมด':`${v} ดาว`}</button>)}</div><div className="stat-grid review-stats">{[['overall','รวม'],['taste','รสชาติ'],['freshness','ความสด'],['service','บริการ'],['cleanliness','ความสะอาด'],['value','ความคุ้มค่า']].map(([k,l])=><div className="stat-card" key={k}><span>★</span><div><small>{l}</small><b>{avg(k)}</b></div></div>)}</div><div className="reviews-grid">{list.map(x=><article key={x.id} className={x.is_flagged?'review-flagged':''}><div className="stars">{'★'.repeat(Number(x.overall||0))}{'☆'.repeat(5-Number(x.overall||0))}</div><p>{x.comment||'ไม่มีความคิดเห็นเพิ่มเติม'}</p><small>{dt(x.created_at)}</small><div className="score-mini">รส {x.taste} • สด {x.freshness} • บริการ {x.service} • สะอาด {x.cleanliness} • คุ้ม {x.value}</div><button className={x.is_flagged?'pill-btn bad':'pill-btn good'} onClick={async()=>{await updateReviewAdmin(x.id,{is_flagged:!x.is_flagged,flag_note:!x.is_flagged?'Manager ติดตาม':'');await load()}}>{x.is_flagged?'⚑ ต้องติดตาม':'✓ ปกติ'}</button></article>)}</div></>
+}
+
+export function ReservationTools()
 
 export function ReservationTools(){
   const [busy,setBusy]=useState(false)
