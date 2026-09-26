@@ -57,6 +57,15 @@ function CustomerShell({children,lang,setLang,settings}) {
           <button className="lang" onClick={()=>setLang(lang==='th'?'en':'th')}>{lang==='th'?'EN':'TH'}</button>
         </div>
       </div>
+      <nav className="mobile-nav luxe-mobile-nav" aria-label={t(lang,'เมนูหลัก','Main navigation')}>
+        <div className="wrap mobile-nav-inner">
+          <NavLink to="/">{t(lang,'หน้าแรก','Home')}</NavLink>
+          <NavLink to="/menu">{t(lang,'เมนู','Menu')}</NavLink>
+          <NavLink to="/reserve">{t(lang,'จองโต๊ะ','Reserve')}</NavLink>
+          <NavLink to="/reservation">{t(lang,'เช็กการจอง','My Booking')}</NavLink>
+          <NavLink to="/chat">{t(lang,'AI Chat','AI Chat')}</NavLink>
+        </div>
+      </nav>
     </header>
     {!open && <div className="closed-banner">{t(lang,'ขณะนี้ร้านปิดรับลูกค้าใหม่ • ยังสามารถตรวจสอบการจองและพูดคุยกับ AI ได้','We are currently closed for new guests • You can still check bookings and chat with AI')}</div>}
     {children}
