@@ -328,3 +328,9 @@ export async function getCurrentProfile(){
   if(!user) return null
   const {data,error}=await supabase.from('profiles').select('*').eq('id',user.id).maybeSingle(); noerr(error); return data
 }
+
+
+export async function updateReservationAdmin(id,payload){
+  if(!supabaseConfigured) return mutate(db=>{const r=db.reservations.find(x=>x.id===id);if(!r)throw new Error('ไม่พบการจอง');Object.assign(r,payload);return r})
+  const {data,error}=await supabase.from('reservations').update(payload).eq('id',id).select().single(); noerr(error); return data
+}
