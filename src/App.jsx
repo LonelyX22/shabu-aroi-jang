@@ -21,7 +21,7 @@ const t=(lang,th,en)=>lang==='th'?th:en
 
 function Logo({small=false,hero=false}) {
   const fallback=`${import.meta.env.BASE_URL}logo.svg`
-  const src=hero?`${import.meta.env.BASE_URL}logo-premium.webp`:(localStorage.getItem('shabu-logo-url')||fallback)
+  const src=hero?(localStorage.getItem('shabu-logo-url')||fallback):(localStorage.getItem('shabu-logo-url')||fallback)
   return <img className={hero?'logo hero-logo':small?'logo small':'logo'} src={src} alt={SHOP.nameTh} />
 }
 
