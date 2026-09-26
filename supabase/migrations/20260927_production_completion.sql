@@ -266,7 +266,7 @@ $$;
 create or replace function public.create_food_order(p_token text,p_items jsonb)
 returns jsonb
 language plpgsql security definer set search_path=public
-as $
+as $func$
 declare
   s public.table_sessions%rowtype;
   v_order_id uuid;
@@ -295,7 +295,7 @@ begin
 
   return jsonb_build_object('id',v_order_id,'order_number',v_order_number,'status','pending');
 end;
-$$;
+$func$;
 
 create or replace function public.request_bill(p_token text)
 returns jsonb
