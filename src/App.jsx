@@ -398,8 +398,15 @@ function TablesAdmin(){
 }
 
 function OrdersAdmin(){
-  const [items,setItems]=useState([]),[filter,setFilter]=useState('active'),[station,setStation]=useState('all'),[tick,setTick]=useState(0)
-  async function load(){setItems(await listOrders())}
+  const [items,setItems]=useState([]),[filter,setFilter]=useState('active'),[station,setStation]=useState('all'),[tick,setTick]=useState(0),[loadError,setLoadError]=useState('')
+  async function load(){
+    try{
+      setItems(await listOrders())
+      setLoadError('')
+    }catch(e){
+      setLoadError(e.message||'โหลด Order ไม่สำเร็จ')
+    }
+  }
   useEffect(()=>{load();const off=subscribeAll(load);const id=setInterval(()=>setTick(x=>x+1),30000);return()=>{off();clearInterval(id)}},[])
   const stations=[['all','ทุก Station'],['kitchen','ครัวหลัก'],['hot','ครัวร้อน'],['fried','ของทอด'],['bar','บาร์น้ำ'],['dessert','ของหวาน']]
   const list=items.filter(x=>(filter==='all'?true:filter==='active'?!['served','cancelled'].includes(x.status):x.status===filter)&&
@@ -407,14 +414,21 @@ function OrdersAdmin(){
   async function move(o,status){try{await updateOrderStatus(o.id,status);load()}catch(e){alert(e.message)}}
   function age(o){return Math.max(0,Math.floor((Date.now()-new Date(o.created_at).getTime())/60000))}
   function full(){const el=document.querySelector('.kitchen-view');if(el?.requestFullscreen)el.requestFullscreen()}
-  return <div className="kitchen-view"><AdminHead eyebrow="KITCHEN DISPLAY" title="Kitchen / Orders" desc="แยก Station, เตือน Order ช้า, Serving และ Full screen" action={<button className="btn dark" onClick={full}>⛶ Full screen</button>}/><div className="filter-row">{[['active','กำลังทำ'],['pending','รอรับ'],['preparing','กำลังเตรียม'],['ready','พร้อมเสิร์ฟ'],['serving','กำลังเสิร์ฟ'],['served','เสิร์ฟแล้ว'],['all','ทั้งหมด']].map(([v,l])=><button className={filter===v?'active':''} key={v} onClick={()=>setFilter(v)}>{l}</button>)}</div><div className="filter-row station-filter">{stations.map(([v,l])=><button className={station===v?'active':''} key={v} onClick={()=>setStation(v)}>{l}</button>)}</div><div className="kitchen-grid">{list.map(o=>{const mins=age(o),slow=mins>=15&&!['served','cancelled'].includes(o.status);return <article className={`kitchen-card ${o.status} ${slow?'slow-order':''}`} key={o.id}><div className="kitchen-head"><div><span>โต๊ะ</span><h2>{o.table_code||'-'}</h2></div><Status value={o.status}/></div><div className="order-clock"><b>{mins} นาที</b>{slow&&<span>⚠ ช้า</span>}</div><small>{o.order_number} • {dateTime(o.created_at)}</small><ul>{(o.items||[]).filter(i=>station==='all'||(i.station||'kitchen')===station).map((i,k)=><li key={i.id||k}><span><b>{i.name_th||i.item_name_th||'เมนู'}</b><small>{({kitchen:'ครัวหลัก',hot:'ครัวร้อน',fried:'ของทอด',bar:'บาร์น้ำ',dessert:'ของหวาน'})[i.station]||i.station||'ครัวหลัก'}</small></span><strong>× {i.quantity}</strong></li>)}</ul><div className="kitchen-actions">{ORDER_FLOW.map(s=><button key={s} disabled={o.status===s} className={o.status===s?'current':''} onClick={()=>move(o,s)}>{ORDER_LABEL[s]}</button>)}</div>{o.served_at&&<small>เสิร์ฟ {dateTime(o.served_at)}</small>}</article>})}{!list.length&&<div className="empty admin-empty"><h2>ไม่มี Order ในสถานะนี้</h2></div>}</div></div>
+  return <div className="kitchen-view"><AdminHead eyebrow="KITCHEN DISPLAY" title="Kitchen / Orders" desc="แยก Station, เตือน Order ช้า, Serving และ Full screen" action={<button className="btn dark" onClick={full}>⛶ Full screen</button>}/>{loadError&&<div className="alert warn"><b>โหลด Order ไม่สำเร็จ</b><span>{loadError}</span><button className="mini-btn" onClick={load}>ลองใหม่</button></div>}<div className="filter-row">{[['active','กำลังทำ'],['pending','รอรับ'],['preparing','กำลังเตรียม'],['ready','พร้อมเสิร์ฟ'],['serving','กำลังเสิร์ฟ'],['served','เสิร์ฟแล้ว'],['all','ทั้งหมด']].map(([v,l])=><button className={filter===v?'active':''} key={v} onClick={()=>setFilter(v)}>{l}</button>)}</div><div className="filter-row station-filter">{stations.map(([v,l])=><button className={station===v?'active':''} key={v} onClick={()=>setStation(v)}>{l}</button>)}</div><div className="kitchen-grid">{list.map(o=>{const mins=age(o),slow=mins>=15&&!['served','cancelled'].includes(o.status);return <article className={`kitchen-card ${o.status} ${slow?'slow-order':''}`} key={o.id}><div className="kitchen-head"><div><span>โต๊ะ</span><h2>{o.table_code||'-'}</h2></div><Status value={o.status}/></div><div className="order-clock"><b>{mins} นาที</b>{slow&&<span>⚠ ช้า</span>}</div><small>{o.order_number} • {dateTime(o.created_at)}</small><ul>{(o.items||[]).filter(i=>station==='all'||(i.station||'kitchen')===station).map((i,k)=><li key={i.id||k}><span><b>{i.name_th||i.item_name_th||'เมนู'}</b><small>{({kitchen:'ครัวหลัก',hot:'ครัวร้อน',fried:'ของทอด',bar:'บาร์น้ำ',dessert:'ของหวาน'})[i.station]||i.station||'ครัวหลัก'}</small></span><strong>× {i.quantity}</strong></li>)}</ul><div className="kitchen-actions">{ORDER_FLOW.map(s=><button key={s} disabled={o.status===s} className={o.status===s?'current':''} onClick={()=>move(o,s)}>{ORDER_LABEL[s]}</button>)}</div>{o.served_at&&<small>เสิร์ฟ {dateTime(o.served_at)}</small>}</article>})}{!list.length&&<div className="empty admin-empty"><h2>ไม่มี Order ในสถานะนี้</h2></div>}</div></div>
 }
 function ServiceAdmin(){
-  const [items,setItems]=useState([])
-  async function load(){setItems(await listServiceCalls())}
+  const [items,setItems]=useState([]),[loadError,setLoadError]=useState('')
+  async function load(){
+    try{
+      setItems(await listServiceCalls())
+      setLoadError('')
+    }catch(e){
+      setLoadError(e.message||'โหลดคำขอไม่สำเร็จ')
+    }
+  }
   useEffect(()=>{load();return subscribeAll(load)},[])
   const label={soup:'เติมน้ำซุป',plates:'ขอจานเพิ่ม',sauce:'ขอน้ำจิ้ม',cleanup:'เก็บจาน',staff:'เรียกพนักงาน',bill:'เช็คบิล'}
-  return <><AdminHead eyebrow="SERVICE CALLS" title="เรียกพนักงาน" desc="คำขอจากลูกค้าแต่ละโต๊ะ"/><div className="service-grid">{items.filter(x=>x.status!=='done').map(x=><article key={x.id}><div><span>โต๊ะ</span><h2>{x.table_code||'-'}</h2></div><h3>{label[x.type]||x.type}</h3><small>{dateTime(x.created_at)}</small><button className="btn primary wide" onClick={async()=>{await resolveServiceCall(x.id);load()}}>รับเรื่องแล้ว ✓</button></article>)}{!items.filter(x=>x.status!=='done').length&&<div className="empty admin-empty"><h2>ไม่มีลูกค้าเรียกพนักงาน</h2></div>}</div></>
+  return <><AdminHead eyebrow="SERVICE CALLS" title="เรียกพนักงาน" desc="คำขอจากลูกค้าแต่ละโต๊ะ"/>{loadError&&<div className="alert warn"><b>โหลดคำขอไม่สำเร็จ</b><span>{loadError}</span><button className="mini-btn" onClick={load}>ลองใหม่</button></div>}<div className="service-grid">{items.filter(x=>x.status!=='done').map(x=><article key={x.id}><div><span>โต๊ะ</span><h2>{x.table_code||'-'}</h2></div><h3>{label[x.type]||x.type}</h3><small>{dateTime(x.created_at)}</small><button className="btn primary wide" onClick={async()=>{await resolveServiceCall(x.id);load()}}>รับเรื่องแล้ว ✓</button></article>)}{!items.filter(x=>x.status!=='done').length&&<div className="empty admin-empty"><h2>ไม่มีลูกค้าเรียกพนักงาน</h2></div>}</div></>
 }
 
 function BillingAdmin(){
