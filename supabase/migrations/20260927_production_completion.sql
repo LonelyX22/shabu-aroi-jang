@@ -20,6 +20,10 @@ alter table public.menu_items
   add column if not exists description_th text not null default '',
   add column if not exists description_en text not null default '';
 
+alter table public.food_order_items
+  add column if not exists unit_price numeric(10,2) not null default 0,
+  add column if not exists line_total numeric(10,2) not null default 0;
+
 alter table public.table_sessions
   add column if not exists adult_count integer not null default 0,
   add column if not exists child_count integer not null default 0,
@@ -209,6 +213,8 @@ declare
   st public.shop_settings%rowtype;
   v_subtotal numeric(10,2);
   v_total numeric(10,2);
+  v_discount numeric(10,2) := greatest(0,coalesce(p_discount_amount,0));
+  promo public.promotions%rowtype;
 begin
   if not public.is_admin() then raise exception 'Unauthorized'; end if;
   if p_adult_count<0 or p_child_count<0 or p_free_child_count<0 then raise exception 'จำนวนลูกค้าไม่ถูกต้อง'; end if;
@@ -220,7 +226,23 @@ begin
   select * into st from public.shop_settings where id=1;
 
   v_subtotal := p_adult_count*st.buffet_price + p_child_count*st.child_price;
-  v_total := greatest(0,v_subtotal + coalesce(b.extra_total,0) - greatest(0,coalesce(p_discount_amount,0)));
+
+  if nullif(trim(coalesce(p_promotion_code,'')),'') is not null then
+    select * into promo from public.promotions
+    where code=upper(trim(p_promotion_code))
+      and is_active=true
+      and (start_at is null or start_at<=now())
+      and (end_at is null or end_at>=now())
+    limit 1;
+    if not found then raise exception 'Promotion code ไม่ถูกต้องหรือหมดอายุ'; end if;
+    if promo.discount_type='percent' then
+      v_discount := round((v_subtotal + coalesce(b.extra_total,0)) * promo.discount_value / 100, 2);
+    else
+      v_discount := promo.discount_value;
+    end if;
+  end if;
+
+  v_total := greatest(0,v_subtotal + coalesce(b.extra_total,0) - v_discount);
 
   update public.table_sessions
   set guest_count=p_adult_count+p_child_count+p_free_child_count,
@@ -230,8 +252,8 @@ begin
   update public.bills
   set guest_count=p_adult_count+p_child_count+p_free_child_count,
       adult_count=p_adult_count, child_count=p_child_count, free_child_count=p_free_child_count,
-      buffet_subtotal=v_subtotal, discount_amount=greatest(0,coalesce(p_discount_amount,0)),
-      promotion_code=nullif(trim(coalesce(p_promotion_code,'')),''),
+      buffet_subtotal=v_subtotal, discount_amount=v_discount,
+      promotion_code=case when nullif(trim(coalesce(p_promotion_code,'')),'') is null then null else upper(trim(p_promotion_code)) end,
       note=left(coalesce(p_note,''),500), total=v_total
   where id=b.id
   returning * into b;
@@ -240,6 +262,40 @@ begin
   return to_jsonb(b);
 end;
 $$;
+
+create or replace function public.create_food_order(p_token text,p_items jsonb)
+returns jsonb
+language plpgsql security definer set search_path=public
+as $
+declare
+  s public.table_sessions%rowtype;
+  v_order_id uuid;
+  v_order_number text;
+  x jsonb;
+  m public.menu_items%rowtype;
+  q integer;
+begin
+  select * into s from public.table_sessions where token=upper(trim(p_token)) and status='active';
+  if not found then raise exception 'Session ไม่พร้อมใช้งาน'; end if;
+  if jsonb_typeof(p_items)<>'array' or jsonb_array_length(p_items)=0 then raise exception 'ไม่มีรายการอาหาร'; end if;
+  if jsonb_array_length(p_items)>40 then raise exception 'รายการต่อรอบมากเกินไป'; end if;
+
+  v_order_number := 'SH-'||to_char(timezone('Asia/Bangkok',now()),'YYMMDD')||'-'||lpad(nextval('public.food_order_seq')::text,5,'0');
+  insert into public.food_orders(order_number,session_id) values(v_order_number,s.id) returning id into v_order_id;
+
+  for x in select value from jsonb_array_elements(p_items)
+  loop
+    q := coalesce((x->>'quantity')::integer,0);
+    if q<1 or q>20 then raise exception 'จำนวนสินค้าไม่ถูกต้อง'; end if;
+    select * into m from public.menu_items where id=(x->>'menu_item_id')::uuid and is_available=true;
+    if not found then raise exception 'มีเมนูที่ไม่พร้อมเสิร์ฟ'; end if;
+    insert into public.food_order_items(order_id,menu_item_id,item_name_th,item_name_en,quantity,unit_price,line_total)
+    values(v_order_id,m.id,m.name_th,m.name_en,q,coalesce(m.extra_price,0),coalesce(m.extra_price,0)*q);
+  end loop;
+
+  return jsonb_build_object('id',v_order_id,'order_number',v_order_number,'status','pending');
+end;
+$;
 
 create or replace function public.request_bill(p_token text)
 returns jsonb
@@ -253,6 +309,7 @@ declare
   v_child integer;
   v_free integer;
   v_subtotal numeric(10,2);
+  v_extra numeric(10,2);
 begin
   select * into s from public.table_sessions where token=upper(trim(p_token)) and status='active' for update;
   if not found then raise exception 'Session ไม่พร้อมใช้งาน'; end if;
@@ -262,12 +319,17 @@ begin
   v_child := s.child_count;
   v_free := s.free_child_count;
   v_subtotal := v_adult*st.buffet_price + v_child*st.child_price;
+  select coalesce(sum(i.line_total),0) into v_extra
+  from public.food_order_items i
+  join public.food_orders o on o.id=i.order_id
+  where o.session_id=s.id and o.status<>'cancelled';
 
-  insert into public.bills(session_id,guest_count,adult_count,child_count,free_child_count,buffet_subtotal,total)
-  values(s.id,s.guest_count,v_adult,v_child,v_free,v_subtotal,v_subtotal)
+  insert into public.bills(session_id,guest_count,adult_count,child_count,free_child_count,buffet_subtotal,extra_total,total)
+  values(s.id,s.guest_count,v_adult,v_child,v_free,v_subtotal,v_extra,v_subtotal+v_extra)
   on conflict(session_id) do update set
     guest_count=excluded.guest_count,adult_count=excluded.adult_count,child_count=excluded.child_count,
-    free_child_count=excluded.free_child_count,buffet_subtotal=excluded.buffet_subtotal,total=excluded.total
+    free_child_count=excluded.free_child_count,buffet_subtotal=excluded.buffet_subtotal,
+    extra_total=excluded.extra_total,total=excluded.total
   returning * into b;
 
   update public.table_sessions set status='billing' where id=s.id;
