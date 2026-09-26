@@ -51,8 +51,19 @@ function CategoryManager({cats,onClose,onChanged}){
 
 export function TablesManager(){
   const [tables,setTables]=useState([]),[sessions,setSessions]=useState([]),[walkin,setWalkin]=useState(null),[move,setMove]=useState(null),[manage,setManage]=useState(null),[qrSession,setQrSession]=useState(null),[links,setLinks]=useState([])
-  const [counts,setCounts]=useState({adult:2,child:0,free:0})
-  async function load(){const [t,s]=await Promise.all([listTables(),listActiveSessions()]);setTables(t);setSessions(s)}
+  const [counts,setCounts]=useState({adult:2,child:0,free:0}),[loadError,setLoadError]=useState('')
+  async function load(){
+    const [tableResult,sessionResult]=await Promise.allSettled([listTables(),listActiveSessions()])
+    if(tableResult.status==='fulfilled'){
+      setTables(tableResult.value||[])
+      setLoadError('')
+    }else{
+      setTables([])
+      setLoadError(tableResult.reason?.message||'โหลดข้อมูลโต๊ะไม่สำเร็จ')
+    }
+    if(sessionResult.status==='fulfilled') setSessions(sessionResult.value||[])
+    else setSessions([])
+  }
   useEffect(()=>{load();return subscribeAll(load)},[])
   async function open(){try{const created=await openWalkin(walkin.id,counts.adult,counts.child,counts.free);setWalkin(null);setQrSession(created);setCounts({adult:2,child:0,free:0});await load()}catch(e){alert(e.message)}}
   async function moveNow(newId){try{await moveTableSession(move.id,newId);setMove(null);await load()}catch(e){alert(e.message)}}
@@ -65,6 +76,8 @@ export function TablesManager(){
   const activeByTable=new Map(sessions.map(s=>[s.table_id,s]))
   const qrUrl=qrSession?.token?`${window.location.origin}/shabu-aroi-jang/table/${qrSession.token}`:''
   return <><Head eyebrow="TABLE OPERATIONS" title="จัดการโต๊ะขั้นสูง" desc="Walk-in, ย้าย/รวม/แยกโต๊ะ, ปรับจำนวนคน และจัดการ QR"/>
+    {loadError&&<div className="alert warn table-load-error"><b>โหลดข้อมูลโต๊ะไม่สำเร็จ</b><span>{loadError}</span><button className="mini-btn" onClick={load}>ลองใหม่</button></div>}
+    {!loadError&&!tables.length&&<div className="admin-card"><p className="muted">ยังไม่มีข้อมูลโต๊ะในระบบ</p></div>}
     <div className="floor-grid">{tables.map(t=>{const s=activeByTable.get(t.id);return <article className={`table-tile ${t.status}`} key={t.id}><div className="table-icon">🍲</div><h2>{t.code}</h2><p>{t.seats} ที่นั่ง</p><span className={`status status-${t.status}`}>{t.status}</span>{s&&<small>{s.guest_count} คน • {s.status}</small>}<div className="table-actions">{t.status==='available'&&<button className="mini-btn ok" onClick={()=>setWalkin(t)}>+ Walk-in</button>}{s&&<button className="mini-btn qr" onClick={()=>setQrSession(s)}>QR</button>}{s&&<button className="mini-btn" onClick={()=>setMove(s)}>ย้าย</button>}{s&&<button className="mini-btn" onClick={()=>openManage(s)}>จัดการ</button>}{t.status==='cleaning'&&<button className="mini-btn ok" onClick={async()=>{await markTableReady(t.id);load()}}>พร้อมใช้งาน</button>}</div></article>})}</div>
     {walkin&&<Modal title={`เปิดโต๊ะ ${walkin.code}`} onClose={()=>setWalkin(null)}><div className="pro-form"><label>ผู้ใหญ่<input type="number" min="0" value={counts.adult} onChange={e=>setCounts(x=>({...x,adult:Number(e.target.value)}))}/></label><label>เด็ก 90–120 ซม.<input type="number" min="0" value={counts.child} onChange={e=>setCounts(x=>({...x,child:Number(e.target.value)}))}/></label><label>เด็กต่ำกว่า 90 ซม.<input type="number" min="0" value={counts.free} onChange={e=>setCounts(x=>({...x,free:Number(e.target.value)}))}/></label><div className="span-2 total-preview">รวม {counts.adult+counts.child+counts.free} คน • ประมาณ {money(counts.adult*299+counts.child*149)}</div><button className="btn primary span-2" onClick={open}>เปิดโต๊ะและสร้าง QR</button></div></Modal>}
     {move&&<Modal title={`ย้ายโต๊ะ ${move.table_code}`} onClose={()=>setMove(null)}><div className="simple-list">{tables.filter(t=>t.status==='available'&&t.seats>=move.guest_count).map(t=><div key={t.id}><span><b>{t.code}</b><small>{t.seats} ที่นั่ง</small></span><button className="mini-btn ok" onClick={()=>moveNow(t.id)}>ย้ายมาที่นี่</button></div>)}</div></Modal>}
