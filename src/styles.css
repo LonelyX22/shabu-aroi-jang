@@ -1670,3 +1670,404 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;whit
   .luxe-journey{border-radius:22px}
   .luxe-location-card{border-radius:24px!important}
 }
+
+
+/* === LUXURY CUSTOMER SUBPAGES v5 === */
+/* Menu / Reservation / Booking / AI Chat now share the homepage visual language */
+.luxe-site .premium-page{
+  position:relative;
+  overflow:hidden;
+  min-height:calc(100vh - 82px);
+  padding:92px 0 118px!important;
+  color:#f8ead8;
+  background:
+    radial-gradient(circle at 14% 9%,rgba(214,166,84,.08),transparent 22%),
+    radial-gradient(circle at 84% 18%,rgba(132,34,24,.20),transparent 26%),
+    radial-gradient(circle at 72% 82%,rgba(214,166,84,.05),transparent 24%),
+    linear-gradient(145deg,#100705 0%,#1a0d0a 46%,#2a0f0b 100%)!important;
+}
+.luxe-site .premium-page:before{
+  content:"";
+  position:absolute;
+  width:720px;height:720px;
+  right:-320px;top:-300px;
+  border-radius:50%;
+  border:1px solid rgba(240,208,139,.07);
+  box-shadow:
+    0 0 0 70px rgba(240,208,139,.012),
+    0 0 0 140px rgba(240,208,139,.008);
+  pointer-events:none;
+}
+.luxe-site .premium-page:after{
+  content:"";
+  position:absolute;
+  width:460px;height:460px;
+  left:-220px;bottom:-250px;
+  border-radius:50%;
+  background:radial-gradient(circle,rgba(130,34,24,.16),transparent 68%);
+  filter:blur(10px);
+  pointer-events:none;
+}
+.luxe-site .premium-page>.wrap{
+  position:relative;
+  z-index:2;
+}
+
+/* headings */
+.luxe-site .premium-page .page-head{
+  margin-bottom:42px;
+}
+.luxe-site .premium-page .page-head.center{
+  max-width:820px;
+  margin-left:auto;
+  margin-right:auto;
+}
+.luxe-site .premium-page .page-head .eyebrow{
+  display:inline-flex;
+  align-items:center;
+  gap:11px;
+  color:#d8aa5a!important;
+  font-size:10px;
+  font-weight:900;
+  letter-spacing:.24em;
+}
+.luxe-site .premium-page .page-head .eyebrow:before{
+  content:"";
+  width:36px;height:1px;
+  background:linear-gradient(90deg,transparent,#d8aa5a);
+}
+.luxe-site .premium-page .page-head h1{
+  margin:11px 0 14px!important;
+  color:#fff4e4!important;
+  font-family:Georgia,"Times New Roman","Noto Serif Thai","Noto Sans Thai",serif;
+  font-size:clamp(44px,5.4vw,70px)!important;
+  line-height:1.03;
+  letter-spacing:-.045em;
+  text-shadow:0 18px 55px rgba(0,0,0,.28);
+}
+.luxe-site .premium-page .page-head p{
+  max-width:680px;
+  margin-left:auto;
+  margin-right:auto;
+  color:#a99485!important;
+  font-size:14px;
+  line-height:1.85!important;
+}
+
+/* shared glass surfaces */
+.luxe-site .premium-page .form-card,
+.luxe-site .premium-page .reservation-card,
+.luxe-site .premium-page .chat-card{
+  background:
+    radial-gradient(circle at 90% 8%,rgba(214,166,84,.055),transparent 26%),
+    linear-gradient(145deg,rgba(57,29,22,.83),rgba(25,13,10,.94))!important;
+  border:1px solid rgba(240,208,139,.13)!important;
+  box-shadow:
+    0 30px 76px rgba(0,0,0,.30),
+    inset 0 1px rgba(255,255,255,.03)!important;
+  backdrop-filter:blur(18px);
+}
+.luxe-site .premium-page .form-card,
+.luxe-site .premium-page .reservation-card{
+  border-radius:30px!important;
+}
+
+/* inputs */
+.luxe-site .premium-page input,
+.luxe-site .premium-page textarea,
+.luxe-site .premium-page select{
+  color:#f7ead8!important;
+  background:rgba(14,7,5,.62)!important;
+  border:1px solid rgba(240,208,139,.13)!important;
+  box-shadow:inset 0 1px rgba(255,255,255,.02)!important;
+}
+.luxe-site .premium-page input::placeholder,
+.luxe-site .premium-page textarea::placeholder{
+  color:#77665c!important;
+}
+.luxe-site .premium-page input:focus,
+.luxe-site .premium-page textarea:focus,
+.luxe-site .premium-page select:focus{
+  border-color:rgba(224,176,88,.55)!important;
+  box-shadow:0 0 0 3px rgba(214,166,84,.08),0 0 30px rgba(214,166,84,.05)!important;
+}
+.luxe-site .premium-page label{
+  color:#d9c6b6!important;
+}
+
+/* unified premium buttons inside sub-pages */
+.luxe-site .premium-page .btn.primary{
+  background:linear-gradient(135deg,#efd18e,#d0a04d 58%,#b5782c)!important;
+  color:#28150f!important;
+  border:1px solid rgba(255,239,204,.38)!important;
+  box-shadow:0 16px 36px rgba(178,116,39,.19),inset 0 1px rgba(255,255,255,.55)!important;
+}
+.luxe-site .premium-page .btn.dark{
+  background:linear-gradient(145deg,#452219,#24110d)!important;
+  color:#f4d99f!important;
+  border:1px solid rgba(214,166,84,.22)!important;
+}
+.luxe-site .premium-page .btn:hover{
+  transform:translateY(-2px);
+}
+
+/* MENU */
+.luxe-site .premium-page .menu-toolbar{
+  max-width:700px;
+  margin-bottom:20px;
+}
+.luxe-site .premium-page .menu-toolbar input,
+.luxe-site .premium-page .search-box input{
+  height:58px;
+  border-radius:17px!important;
+  background:rgba(19,9,7,.78)!important;
+  box-shadow:0 16px 36px rgba(0,0,0,.18)!important;
+}
+.luxe-site .premium-page .chips{
+  margin-bottom:34px;
+  gap:9px;
+}
+.luxe-site .premium-page .chips button{
+  padding:10px 15px;
+  color:#bfa99a!important;
+  background:rgba(52,28,21,.58)!important;
+  border:1px solid rgba(240,208,139,.10)!important;
+  box-shadow:inset 0 1px rgba(255,255,255,.02);
+}
+.luxe-site .premium-page .chips button:hover{
+  color:#ffe2a8!important;
+  border-color:rgba(240,208,139,.25)!important;
+}
+.luxe-site .premium-page .chips button.active{
+  color:#26140e!important;
+  background:linear-gradient(135deg,#edca80,#c68c3a)!important;
+  border-color:rgba(255,239,205,.35)!important;
+  box-shadow:0 12px 26px rgba(181,118,39,.16);
+}
+.luxe-site .premium-page .menu-grid{
+  gap:16px;
+}
+.luxe-site .premium-page .food-card{
+  min-height:118px;
+  position:relative;
+  overflow:hidden;
+  padding:17px;
+  border-radius:22px!important;
+  background:
+    radial-gradient(circle at 92% 12%,rgba(214,166,84,.06),transparent 25%),
+    linear-gradient(145deg,rgba(55,28,21,.78),rgba(24,12,9,.92))!important;
+  border:1px solid rgba(240,208,139,.10)!important;
+  box-shadow:0 18px 42px rgba(0,0,0,.22),inset 0 1px rgba(255,255,255,.025)!important;
+}
+.luxe-site .premium-page .food-card:after{
+  content:"";
+  position:absolute;
+  width:110px;height:110px;
+  right:-45px;bottom:-55px;
+  border-radius:50%;
+  background:radial-gradient(circle,rgba(137,37,26,.15),transparent 68%);
+}
+.luxe-site .premium-page .food-card:hover{
+  transform:translateY(-4px)!important;
+  border-color:rgba(240,208,139,.24)!important;
+  box-shadow:0 26px 58px rgba(0,0,0,.29),0 0 28px rgba(151,67,31,.06)!important;
+}
+.luxe-site .premium-page .food-emoji{
+  position:relative;
+  z-index:2;
+  background:linear-gradient(145deg,#f7dfb0,#be8038)!important;
+  border:1px solid rgba(255,239,205,.35)!important;
+  box-shadow:0 12px 24px rgba(0,0,0,.17);
+}
+.luxe-site .premium-page .food-card>div:last-child{
+  position:relative;
+  z-index:2;
+}
+.luxe-site .premium-page .food-card small{
+  color:#a8886d!important;
+  letter-spacing:.04em;
+}
+.luxe-site .premium-page .food-card h3{
+  color:#fff0da!important;
+  font-size:17px;
+  margin:4px 0 6px;
+}
+.luxe-site .premium-page .food-card span{
+  color:#b8d9bd!important;
+}
+
+/* RESERVATION FORM */
+.luxe-site .premium-page .premium-form{
+  padding:34px!important;
+}
+.luxe-site .premium-page .form-grid{
+  gap:17px;
+}
+.luxe-site .premium-page .form-card input{
+  min-height:54px;
+  border-radius:14px!important;
+}
+.luxe-site .premium-page .price-preview{
+  margin:24px 0!important;
+  padding:20px!important;
+  border-radius:19px!important;
+  background:
+    radial-gradient(circle at 90% 25%,rgba(214,166,84,.08),transparent 26%),
+    rgba(16,8,6,.56)!important;
+  border:1px solid rgba(240,208,139,.10);
+}
+.luxe-site .premium-page .price-preview span,
+.luxe-site .premium-page .price-preview small{
+  color:#947f70!important;
+}
+.luxe-site .premium-page .price-preview strong{
+  color:#f0cc83!important;
+  font:800 34px Georgia,serif;
+}
+
+/* CHECK RESERVATION */
+.luxe-site .premium-page .search-box{
+  max-width:760px;
+  margin:0 auto 24px;
+  gap:10px;
+}
+.luxe-site .premium-page .reservation-card{
+  margin-top:24px;
+}
+.luxe-site .premium-page .reservation-top{
+  padding-bottom:20px;
+  border-bottom:1px solid rgba(240,208,139,.09);
+}
+.luxe-site .premium-page .reservation-top small{
+  color:#b28b55!important;
+  letter-spacing:.18em;
+}
+.luxe-site .premium-page .reservation-top h2{
+  color:#fff0d6!important;
+  font-family:Georgia,"Times New Roman",serif;
+  letter-spacing:.04em;
+}
+.luxe-site .premium-page .reservation-state.pending{
+  background:rgba(199,146,53,.14)!important;
+  color:#f1c873!important;
+  border:1px solid rgba(214,166,84,.18);
+}
+.luxe-site .premium-page .reservation-state.confirmed{
+  background:rgba(57,139,91,.13)!important;
+  color:#aee7c2!important;
+  border:1px solid rgba(83,180,123,.16);
+}
+.luxe-site .premium-page .reservation-state.rejected,
+.luxe-site .premium-page .reservation-state.cancelled{
+  background:rgba(161,48,39,.14)!important;
+  color:#f0a79e!important;
+  border:1px solid rgba(205,82,69,.17);
+}
+.luxe-site .premium-page .reservation-info{
+  gap:12px;
+  margin:22px 0;
+}
+.luxe-site .premium-page .reservation-info>div{
+  padding:17px!important;
+  border-radius:16px!important;
+  background:rgba(15,8,6,.52)!important;
+  border:1px solid rgba(240,208,139,.08);
+}
+.luxe-site .premium-page .reservation-info span{
+  color:#8f786a!important;
+}
+.luxe-site .premium-page .reservation-info b{
+  color:#f8e9d4!important;
+}
+.luxe-site .premium-page .qr-zone{
+  border-top:1px solid rgba(240,208,139,.09)!important;
+  padding-top:28px!important;
+}
+.luxe-site .premium-page .qr-zone svg{
+  background:#fff8ef!important;
+  border:1px solid rgba(214,166,84,.26)!important;
+  box-shadow:0 18px 40px rgba(0,0,0,.28);
+}
+.luxe-site .premium-page .qr-zone h3{color:#fff0d6!important}
+.luxe-site .premium-page .qr-zone p{color:#978174!important}
+
+/* AI CHAT */
+.luxe-site .premium-page .chat-wrap{
+  max-width:930px;
+}
+.luxe-site .premium-page .chat-card{
+  border-radius:30px!important;
+  overflow:hidden;
+}
+.luxe-site .premium-page .chat-log{
+  min-height:500px;
+  padding:26px!important;
+  background:
+    radial-gradient(circle at 88% 10%,rgba(214,166,84,.05),transparent 25%),
+    linear-gradient(180deg,rgba(21,10,8,.94),rgba(13,7,5,.98))!important;
+}
+.luxe-site .premium-page .bubble-msg>span{
+  background:linear-gradient(145deg,#e7c47a,#a86c29)!important;
+  color:#27140d!important;
+  border:1px solid rgba(255,239,205,.32);
+  box-shadow:0 10px 22px rgba(0,0,0,.18);
+}
+.luxe-site .premium-page .bubble-msg.bot p{
+  color:#e9d8c8!important;
+  background:rgba(61,33,25,.70)!important;
+  border:1px solid rgba(240,208,139,.09);
+}
+.luxe-site .premium-page .bubble-msg.user p{
+  color:#fff3dd!important;
+  background:
+    radial-gradient(circle at 80% 20%,rgba(214,166,84,.10),transparent 30%),
+    linear-gradient(135deg,#6f1b14,#38120d)!important;
+  border:1px solid rgba(240,208,139,.11);
+}
+.luxe-site .premium-page .chat-input{
+  padding:16px!important;
+  background:linear-gradient(180deg,#24120e,#160b08)!important;
+  border-top:1px solid rgba(240,208,139,.09)!important;
+}
+.luxe-site .premium-page .chat-input input{
+  min-height:54px;
+  border-radius:15px!important;
+}
+
+/* errors and empty states */
+.luxe-site .premium-page .alert.error{
+  color:#ffc3ba!important;
+  background:rgba(139,38,29,.16)!important;
+  border:1px solid rgba(210,78,65,.18)!important;
+}
+.luxe-site .premium-page .empty{
+  background:
+    radial-gradient(circle at 85% 12%,rgba(214,166,84,.06),transparent 28%),
+    linear-gradient(145deg,rgba(54,28,21,.82),rgba(24,12,9,.94))!important;
+  color:#f6e7d2;
+  border:1px solid rgba(240,208,139,.11)!important;
+  box-shadow:0 28px 68px rgba(0,0,0,.27)!important;
+}
+.luxe-site .premium-page .empty h2{color:#fff0d7!important}
+.luxe-site .premium-page .empty p{color:#a48d7d!important}
+
+@media(max-width:900px){
+  .luxe-site .premium-page{
+    min-height:calc(100vh - 72px);
+    padding:72px 0 92px!important;
+  }
+  .luxe-site .premium-page .menu-grid{grid-template-columns:1fr 1fr}
+}
+@media(max-width:640px){
+  .luxe-site .premium-page{
+    padding:54px 0 72px!important;
+  }
+  .luxe-site .premium-page .page-head h1{
+    font-size:43px!important;
+  }
+  .luxe-site .premium-page .menu-grid{grid-template-columns:1fr}
+  .luxe-site .premium-page .premium-form{padding:22px!important}
+  .luxe-site .premium-page .search-box{display:grid}
+  .luxe-site .premium-page .chat-log{min-height:430px;padding:18px!important}
+  .luxe-site .premium-page .bubble-msg{max-width:88%}
+}
