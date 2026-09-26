@@ -113,6 +113,14 @@ export async function listOrders(){
 
   const merged=new Map()
 
+  // Exact production helper, when installed.
+  try{
+    const exact=await supabase.rpc('admin_list_orders')
+    if(!exact.error){
+      for(const o of exact.data||[]) merged.set(o.id,o)
+    }
+  }catch{}
+
   // 1) Admin table query (fast path)
   try{
     let result=await supabase
