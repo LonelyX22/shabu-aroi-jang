@@ -113,7 +113,7 @@ export async function listOrders(){
 
   const merged=new Map()
 
-  // Exact production helper, when installed.
+  // Exact helper when installed.
   try{
     const exact=await supabase.rpc('admin_list_orders')
     if(!exact.error){
@@ -121,72 +121,69 @@ export async function listOrders(){
     }
   }catch{}
 
-  // 1) Admin table query (fast path)
-  try{
-    let result=await supabase
-      .from('food_orders')
-      .select('*, table_sessions(token, restaurant_tables(code)), food_order_items(*)')
-      .order('created_at',{ascending:false})
+  // Always read the base rows and resolve table_id -> table code explicitly.
+  const ordersRes=await supabase.from('food_orders').select('*').order('created_at',{ascending:false})
+  if(!ordersRes.error){
+    const orders=ordersRes.data||[]
+    const orderIds=orders.map(x=>x.id)
+    const sessionIds=[...new Set(orders.map(x=>x.session_id).filter(Boolean))]
 
-    if(result.error){
-      result=await supabase.from('food_orders').select('*').order('created_at',{ascending:false})
+    const [itemsRes,sessionsRes]=await Promise.all([
+      orderIds.length
+        ? supabase.from('food_order_items').select('*').in('order_id',orderIds)
+        : Promise.resolve({data:[],error:null}),
+      sessionIds.length
+        ? supabase.from('table_sessions').select('id,table_id,token').in('id',sessionIds)
+        : Promise.resolve({data:[],error:null})
+    ])
+
+    const tableIds=[...new Set((sessionsRes.data||[]).map(s=>s.table_id).filter(Boolean))]
+    const tablesRes=tableIds.length
+      ? await supabase.from('restaurant_tables').select('id,code,seats,status').in('id',tableIds)
+      : {data:[],error:null}
+
+    const tableMap=new Map((tablesRes.data||[]).map(t=>[t.id,t]))
+    const sessionMap=new Map((sessionsRes.data||[]).map(s=>[s.id,{...s,table:tableMap.get(s.table_id)}]))
+    const itemsByOrder=new Map()
+
+    for(const item of itemsRes.data||[]){
+      const arr=itemsByOrder.get(item.order_id)||[]
+      arr.push(item)
+      itemsByOrder.set(item.order_id,arr)
     }
 
-    if(!result.error){
-      const rows=result.data||[]
-      let itemsByOrder=new Map()
-      let sessionsById=new Map()
-
-      if(rows.length && !rows[0]?.food_order_items){
-        const orderIds=rows.map(x=>x.id)
-        const sessionIds=[...new Set(rows.map(x=>x.session_id).filter(Boolean))]
-        const [itemsRes,sessionsRes]=await Promise.all([
-          supabase.from('food_order_items').select('*').in('order_id',orderIds),
-          sessionIds.length
-            ? supabase.from('table_sessions').select('id,token,restaurant_tables(code)').in('id',sessionIds)
-            : Promise.resolve({data:[],error:null})
-        ])
-        for(const item of itemsRes.data||[]){
-          const arr=itemsByOrder.get(item.order_id)||[]
-          arr.push(item)
-          itemsByOrder.set(item.order_id,arr)
-        }
-        sessionsById=new Map((sessionsRes.data||[]).map(x=>[x.id,x]))
-      }
-
-      for(const o of rows){
-        const session=o.table_sessions||sessionsById.get(o.session_id)
-        const previous=merged.get(o.id)
-        merged.set(o.id,{
-          ...previous,
-          ...o,
-          table_code:session?.restaurant_tables?.code||previous?.table_code||o.table_code||'-',
-          items:(o.food_order_items?.length?o.food_order_items:null)||itemsByOrder.get(o.id)||previous?.items||o.items||[]
-        })
-      }
+    for(const o of orders){
+      const previous=merged.get(o.id)
+      const session=sessionMap.get(o.session_id)
+      merged.set(o.id,{
+        ...previous,
+        ...o,
+        table_code:session?.table?.code||previous?.table_code||'-',
+        items:itemsByOrder.get(o.id)||previous?.items||[]
+      })
     }
-  }catch{}
+  }
 
-  // 2) Always merge the customer-session RPC results.
-  // This is the exact data source used by the table QR page and avoids
-  // PostgREST/RLS relationship-cache differences on the admin query.
+  // Merge customer-session RPC data as a final safety net.
   try{
     const sessions=await listActiveSessions()
     for(const s of sessions.filter(x=>x.token)){
       try{
         const rows=await listSessionOrders(s.token)
         for(const o of rows||[]){
+          const previous=merged.get(o.id)
           merged.set(o.id,{
-            ...(merged.get(o.id)||{}),
+            ...previous,
             ...o,
-            table_code:s.table_code||merged.get(o.id)?.table_code||'-',
-            items:o.items||merged.get(o.id)?.items||[]
+            table_code:s.table_code||previous?.table_code||'-',
+            items:o.items||previous?.items||[]
           })
         }
       }catch{}
     }
   }catch{}
 
+  if(!merged.size && ordersRes.error) noerr(ordersRes.error)
   return [...merged.values()].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))
 }
 
@@ -211,7 +208,6 @@ export async function listServiceCalls(){
 
   const merged=new Map()
 
-  // Exact source for production databases with the admin helper installed.
   try{
     const exact=await supabase.rpc('admin_list_service_calls')
     if(!exact.error){
@@ -219,62 +215,42 @@ export async function listServiceCalls(){
     }
   }catch{}
 
-  // Normal admin query.
-  try{
-    let result=await supabase
-      .from('service_calls')
-      .select('*, table_sessions(id,table_id,restaurant_tables(code))')
-      .order('created_at',{ascending:false})
+  const callsRes=await supabase.from('service_calls').select('*').order('created_at',{ascending:false})
+  if(!callsRes.error){
+    const rows=callsRes.data||[]
+    const sessionIds=[...new Set(rows.map(x=>x.session_id).filter(Boolean))]
+    const sessionsRes=sessionIds.length
+      ? await supabase.from('table_sessions').select('id,table_id').in('id',sessionIds)
+      : {data:[],error:null}
 
-    if(result.error){
-      result=await supabase.from('service_calls').select('*').order('created_at',{ascending:false})
+    const tableIds=[...new Set((sessionsRes.data||[]).map(s=>s.table_id).filter(Boolean))]
+    const tablesRes=tableIds.length
+      ? await supabase.from('restaurant_tables').select('id,code').in('id',tableIds)
+      : {data:[],error:null}
+
+    const tableMap=new Map((tablesRes.data||[]).map(t=>[t.id,t.code]))
+    const sessionMap=new Map((sessionsRes.data||[]).map(s=>[s.id,tableMap.get(s.table_id)||'-']))
+
+    for(const x of rows){
+      const previous=merged.get(x.id)
+      merged.set(x.id,{
+        ...previous,
+        ...x,
+        table_code:sessionMap.get(x.session_id)||previous?.table_code||'-'
+      })
     }
+  }
 
-    if(!result.error){
-      const rows=result.data||[]
-      let sessionMap=new Map()
-
-      if(rows.length && !rows[0]?.table_sessions){
-        const sessionIds=[...new Set(rows.map(x=>x.session_id).filter(Boolean))]
-        if(sessionIds.length){
-          const sessions=await supabase.from('table_sessions')
-            .select('id,table_id')
-            .in('id',sessionIds)
-          const tableIds=[...new Set((sessions.data||[]).map(x=>x.table_id).filter(Boolean))]
-          const tables=tableIds.length
-            ? await supabase.from('restaurant_tables').select('id,code').in('id',tableIds)
-            : {data:[]}
-          const tableMap=new Map((tables.data||[]).map(t=>[t.id,t.code]))
-          sessionMap=new Map((sessions.data||[]).map(ss=>[ss.id,tableMap.get(ss.table_id)||'-']))
-        }
-      }
-
-      for(const x of rows){
-        const previous=merged.get(x.id)
-        merged.set(x.id,{
-          ...previous,
-          ...x,
-          table_code:x.table_sessions?.restaurant_tables?.code||sessionMap.get(x.session_id)||previous?.table_code||x.table_code||'-'
-        })
-      }
-    }
-  }catch{}
-
-  // Notification fallback: if the service call row is hidden by an old RLS
-  // policy, infer the table from the current table status. create_service_call
-  // always marks that table as "service".
+  // Notification fallback if an old RLS policy hides the underlying call row.
   try{
     const notices=(await listNotifications()).filter(n=>n.event_type==='service_calls')
     const tables=await listTables().catch(()=>[])
     const serviceTables=tables.filter(t=>t.status==='service')
-
     for(const n of notices){
       if(merged.has(n.entity_id))continue
-
       const inferredCode=serviceTables.length===1
         ? serviceTables[0].code
         : serviceTables.map(t=>t.code).join(' / ')||'-'
-
       merged.set(n.entity_id,{
         id:n.entity_id,
         type:n.message||'staff',
@@ -287,6 +263,7 @@ export async function listServiceCalls(){
     }
   }catch{}
 
+  if(!merged.size && callsRes.error) noerr(callsRes.error)
   return [...merged.values()].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))
 }
 
