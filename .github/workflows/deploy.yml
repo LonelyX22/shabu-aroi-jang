@@ -1,5 +1,7 @@
 name: Deploy GitHub Pages
 
+# Supabase frontend config is injected from repository secrets.
+
 on:
   push:
     branches: [main]
