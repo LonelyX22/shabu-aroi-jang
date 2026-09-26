@@ -179,7 +179,7 @@ Deno.serve(async (req) => {
 
     if (!answer) return json({ error: 'empty_ai_response' }, 502)
 
-    return json({ answer, model: OPENAI_MODEL })
+    return json({ answer, model: OPENAI_MODEL, version: 'conversation-v2' })
   } catch (error) {
     console.error('ai-chat error', String(error))
     return json({ error: 'temporary_ai_error' }, 500)
