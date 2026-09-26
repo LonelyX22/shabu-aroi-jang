@@ -110,8 +110,61 @@ export async function createFoodOrder(token,items){
 }
 export async function listOrders(){
   if(!supabaseConfigured) return getDemo().orders
-  const {data,error}=await supabase.from('food_orders').select('*, table_sessions(token, restaurant_tables(code)), food_order_items(*)').order('created_at',{ascending:false}); noerr(error)
-  return (data||[]).map(o=>({...o,table_code:o.table_sessions?.restaurant_tables?.code,items:o.food_order_items||[]}))
+
+  // Preferred query with all relations in one request.
+  let result=await supabase
+    .from('food_orders')
+    .select('*, table_sessions(token, restaurant_tables(code)), food_order_items(*)')
+    .order('created_at',{ascending:false})
+
+  if(!result.error && (result.data||[]).length){
+    return result.data.map(o=>({
+      ...o,
+      table_code:o.table_sessions?.restaurant_tables?.code,
+      items:o.food_order_items||[]
+    }))
+  }
+
+  // Fallback for PostgREST relationship/schema-cache issues.
+  const simple=await supabase.from('food_orders').select('*').order('created_at',{ascending:false})
+  if(!simple.error && (simple.data||[]).length){
+    const orders=simple.data||[]
+    const orderIds=orders.map(x=>x.id)
+    const sessionIds=[...new Set(orders.map(x=>x.session_id).filter(Boolean))]
+    const [itemsRes,sessionsRes]=await Promise.all([
+      supabase.from('food_order_items').select('*').in('order_id',orderIds),
+      sessionIds.length
+        ? supabase.from('table_sessions').select('id,token,restaurant_tables(code)').in('id',sessionIds)
+        : Promise.resolve({data:[],error:null})
+    ])
+    const itemsByOrder=new Map()
+    for(const item of itemsRes.data||[]){
+      const arr=itemsByOrder.get(item.order_id)||[]
+      arr.push(item)
+      itemsByOrder.set(item.order_id,arr)
+    }
+    const sessionsById=new Map((sessionsRes.data||[]).map(s=>[s.id,s]))
+    return orders.map(o=>({
+      ...o,
+      table_code:sessionsById.get(o.session_id)?.restaurant_tables?.code||'-',
+      items:itemsByOrder.get(o.id)||[]
+    }))
+  }
+
+  // Final fallback: use the same SECURITY DEFINER RPC that the customer
+  // table page uses, so current live orders still reach the kitchen screen.
+  try{
+    const sessions=await listActiveSessions()
+    const live=[]
+    for(const s of sessions.filter(x=>x.token)){
+      const rows=await listSessionOrders(s.token)
+      for(const o of rows||[]) live.push({...o,table_code:s.table_code||'-'})
+    }
+    if(live.length) return live.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))
+  }catch{}
+
+  if(result.error && simple.error) noerr(simple.error)
+  return []
 }
 export async function listSessionOrders(token){
   if(!supabaseConfigured){ const db=getDemo(); const s=db.sessions.find(x=>x.token===token); return s?db.orders.filter(o=>o.session_id===s.id):[] }
@@ -131,8 +184,50 @@ export async function createServiceCall(token,type,note=''){
 }
 export async function listServiceCalls(){
   if(!supabaseConfigured)return getDemo().service_calls
-  const {data,error}=await supabase.from('service_calls').select('*, table_sessions(restaurant_tables(code))').order('created_at',{ascending:false}); noerr(error)
-  return (data||[]).map(x=>({...x,table_code:x.table_sessions?.restaurant_tables?.code}))
+
+  let result=await supabase
+    .from('service_calls')
+    .select('*, table_sessions(restaurant_tables(code))')
+    .order('created_at',{ascending:false})
+
+  if(!result.error && (result.data||[]).length){
+    return result.data.map(x=>({
+      ...x,
+      table_code:x.table_sessions?.restaurant_tables?.code
+    }))
+  }
+
+  // Fallback without nested relations.
+  const simple=await supabase.from('service_calls').select('*').order('created_at',{ascending:false})
+  if(!simple.error && (simple.data||[]).length){
+    const rows=simple.data||[]
+    const sessionIds=[...new Set(rows.map(x=>x.session_id).filter(Boolean))]
+    const sessions=sessionIds.length
+      ? await supabase.from('table_sessions').select('id,restaurant_tables(code)').in('id',sessionIds)
+      : {data:[]}
+    const byId=new Map((sessions.data||[]).map(s=>[s.id,s.restaurant_tables?.code]))
+    return rows.map(x=>({...x,table_code:byId.get(x.session_id)||'-'}))
+  }
+
+  // Notifications prove the customer action was received even if an old
+  // RLS/schema cache prevents the service_calls list from joining correctly.
+  try{
+    const notices=(await listNotifications()).filter(n=>n.event_type==='service_calls')
+    if(notices.length){
+      return notices.map(n=>({
+        id:n.entity_id,
+        type:n.message||'staff',
+        note:'',
+        status:'pending',
+        created_at:n.created_at,
+        table_code:'-',
+        notification_fallback:true
+      }))
+    }
+  }catch{}
+
+  if(result.error && simple.error) noerr(simple.error)
+  return []
 }
 export async function resolveServiceCall(id){
   if(!supabaseConfigured)return mutate(db=>{const c=db.service_calls.find(x=>x.id===id); if(c)c.status='done'; return c})
