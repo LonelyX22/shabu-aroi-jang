@@ -193,3 +193,5 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;whit
   .qr-admin-modal,.pro-modal{box-shadow:none!important;border:0!important}
   .modal-close,.qr-modal-actions{display:none!important}
 }
+
+.pro-modal.wide{width:min(980px,100%)}
