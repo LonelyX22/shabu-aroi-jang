@@ -547,6 +547,9 @@ export async function askAi(message,history=[],lang='th'){
       body:{message:String(message).slice(0,2000),history:cleanHistory,context:compact,lang}
     })
     if(error) throw error
+    // Old deployed ai-chat versions did not support conversation history.
+    // Use the local conversational fallback until conversation-v2 is deployed.
+    if(data?.version!=='conversation-v2') return fallback()
     const answer=String(data?.answer||'').trim() || fallback()
     try{
       const key=localStorage.getItem('shabu-chat-key')||crypto.randomUUID()
