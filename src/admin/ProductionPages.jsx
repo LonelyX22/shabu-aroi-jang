@@ -165,13 +165,104 @@ export function KnowledgeBasePage(){
 }
 
 export function ReviewsAdvancedPage(){
-  const [items,setItems]=useState([]),[star,setStar]=useState('all')
-  async function load(){setItems(await listReviews())}
-  useEffect(()=>{load();return subscribeAll(load)},[])
+  const [items,setItems]=useState([])
+  const [star,setStar]=useState('all')
+
+  async function load(){
+    setItems(await listReviews())
+  }
+
+  useEffect(()=>{
+    load()
+    return subscribeAll(load)
+  },[])
+
   const list=items.filter(x=>star==='all'||Number(x.overall)===Number(star))
-  const avg=(k)=>items.length?(items.reduce((s,x)=>s+Number(x[k]||0),0)/items.length).toFixed(2):'-'
-  function exportCsv(){const rows=[['date','overall','taste','freshness','service','cleanliness','value','comment','flagged'],...list.map(x=>[x.created_at,x.overall,x.taste,x.freshness,x.service,x.cleanliness,x.value,x.comment,x.is_flagged])];const csv=rows.map(r=>r.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));a.download='shabu-reviews.csv';a.click()}
-  return <><Head eyebrow="REVIEWS ANALYTICS" title="รีวิวลูกค้า" desc="กรองดาว วิเคราะห์รายหัวข้อ Export และติดตามรีวิวต่ำ" action={<button className="btn primary" onClick={exportCsv}>Export CSV</button>}/><div className="filter-row">{['all',5,4,3,2,1].map(v=><button className={String(star)===String(v)?'active':''} key={v} onClick={()=>setStar(v)}>{v==='all'?'ทั้งหมด':`${v} ดาว`}</button>)}</div><div className="stat-grid review-stats">{[['overall','รวม'],['taste','รสชาติ'],['freshness','ความสด'],['service','บริการ'],['cleanliness','ความสะอาด'],['value','ความคุ้มค่า']].map(([k,l])=><div className="stat-card" key={k}><span>★</span><div><small>{l}</small><b>{avg(k)}</b></div></div>)}</div><div className="reviews-grid">{list.map(x=><article key={x.id} className={x.is_flagged?'review-flagged':''}><div className="stars">{'★'.repeat(Number(x.overall||0))}{'☆'.repeat(5-Number(x.overall||0))}</div><p>{x.comment||'ไม่มีความคิดเห็นเพิ่มเติม'}</p><small>{dt(x.created_at)}</small><div className="score-mini">รส {x.taste} • สด {x.freshness} • บริการ {x.service} • สะอาด {x.cleanliness} • คุ้ม {x.value}</div><button className={x.is_flagged?'pill-btn bad':'pill-btn good'} onClick={async()=>{await updateReviewAdmin(x.id,{is_flagged:!x.is_flagged,flag_note:!x.is_flagged?'Manager ติดตาม':'');await load()}}>{x.is_flagged?'⚑ ต้องติดตาม':'✓ ปกติ'}</button></article>)}</div></>
+  const avg=(key)=>{
+    if(!items.length) return '-'
+    return (items.reduce((sum,x)=>sum+Number(x[key]||0),0)/items.length).toFixed(2)
+  }
+
+  function exportCsv(){
+    const rows=[
+      ['date','overall','taste','freshness','service','cleanliness','value','comment','flagged'],
+      ...list.map(x=>[
+        x.created_at,x.overall,x.taste,x.freshness,x.service,
+        x.cleanliness,x.value,x.comment,x.is_flagged
+      ])
+    ]
+    const csv=rows
+      .map(row=>row.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(','))
+      .join('\n')
+    const a=document.createElement('a')
+    a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}))
+    a.download='shabu-reviews.csv'
+    a.click()
+  }
+
+  async function toggleFlag(review){
+    await updateReviewAdmin(review.id,{
+      is_flagged:!review.is_flagged,
+      flag_note:!review.is_flagged?'Manager ติดตาม':''
+    })
+    await load()
+  }
+
+  return <>
+    <Head
+      eyebrow="REVIEWS ANALYTICS"
+      title="รีวิวลูกค้า"
+      desc="กรองดาว วิเคราะห์รายหัวข้อ Export และติดตามรีวิวต่ำ"
+      action={<button className="btn primary" onClick={exportCsv}>Export CSV</button>}
+    />
+
+    <div className="filter-row">
+      {['all',5,4,3,2,1].map(v=>(
+        <button
+          key={v}
+          className={String(star)===String(v)?'active':''}
+          onClick={()=>setStar(v)}
+        >
+          {v==='all'?'ทั้งหมด':`${v} ดาว`}
+        </button>
+      ))}
+    </div>
+
+    <div className="stat-grid review-stats">
+      {[
+        ['overall','รวม'],['taste','รสชาติ'],['freshness','ความสด'],
+        ['service','บริการ'],['cleanliness','ความสะอาด'],['value','ความคุ้มค่า']
+      ].map(([key,label])=>(
+        <div className="stat-card" key={key}>
+          <span>★</span>
+          <div><small>{label}</small><b>{avg(key)}</b></div>
+        </div>
+      ))}
+    </div>
+
+    <div className="reviews-grid">
+      {list.map(review=>(
+        <article key={review.id} className={review.is_flagged?'review-flagged':''}>
+          <div className="stars">
+            {'★'.repeat(Number(review.overall||0))}
+            {'☆'.repeat(Math.max(0,5-Number(review.overall||0)))}
+          </div>
+          <p>{review.comment||'ไม่มีความคิดเห็นเพิ่มเติม'}</p>
+          <small>{dt(review.created_at)}</small>
+          <div className="score-mini">
+            รส {review.taste} • สด {review.freshness} • บริการ {review.service}
+            {' • '}สะอาด {review.cleanliness} • คุ้ม {review.value}
+          </div>
+          <button
+            className={review.is_flagged?'pill-btn bad':'pill-btn good'}
+            onClick={()=>toggleFlag(review)}
+          >
+            {review.is_flagged?'⚑ ต้องติดตาม':'✓ ปกติ'}
+          </button>
+        </article>
+      ))}
+    </div>
+  </>
 }
 
 export function ReservationTools(){
