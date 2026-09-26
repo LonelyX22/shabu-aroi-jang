@@ -1,12 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
-import { QRCodeSVG } from 'qrcode.react'
+import { QRCodeCanvas, QRCodeSVG } from 'qrcode.react'
+import * as XLSX from 'xlsx'
+import html2canvas from 'html2canvas'
+import { jsPDF } from 'jspdf'
 import {
   closeBill, createCategory, createMenuItem, createPromotion, deleteCategory, deleteMenuItem,
   deletePromotion, expireReservations, getReports, listActiveSessions, listAuditLogs, listBills,
   listCategories, listCustomers, listMenu, listProfiles, listPromotions, listTables, moveTableSession,
   openWalkin, subscribeAll, updateBillDetails, updateCategory, updateMenuItem, updateProfile,
-  updatePromotion, markTableReady, registerStaffProfile, listChatLogs
+  updatePromotion, markTableReady, registerStaffProfile, listChatLogs, uploadMenuImage,
+  reorderMenuItems, reorderCategories, mergeSessionTable, detachSessionTable, updateSessionGuests,
+  regenerateSessionQr, getSettings, getSlipSignedUrl, reviewPaymentSlip, listReviews, updateReviewAdmin,
+  listKnowledgeBase, createKnowledge, updateKnowledge, deleteKnowledge, listOrders, listReservations, listServiceCalls
 } from '../lib/api'
+import { promptPayPayload } from '../lib/promptpay'
 
 const money=(n)=>new Intl.NumberFormat('th-TH',{style:'currency',currency:'THB',maximumFractionDigits:0}).format(Number(n||0))
 const dt=(v)=>v?new Intl.DateTimeFormat('th-TH',{dateStyle:'short',timeStyle:'short'}).format(new Date(v)):'-'
