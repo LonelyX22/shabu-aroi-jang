@@ -320,3 +320,11 @@ export async function getReports(){
   ])
   noerr(e1);noerr(e2);noerr(e3);return {bills:bills||[],orders:orders||[],reviews:reviews||[]}
 }
+
+
+export async function getCurrentProfile(){
+  if(!supabaseConfigured) return {id:'demo-owner',email:'demo@shabu.local',display_name:'Owner',role:'owner',is_active:true}
+  const {data:{user}}=await supabase.auth.getUser()
+  if(!user) return null
+  const {data,error}=await supabase.from('profiles').select('*').eq('id',user.id).maybeSingle(); noerr(error); return data
+}
