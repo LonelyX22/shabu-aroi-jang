@@ -5,7 +5,7 @@ import {
   deletePromotion, expireReservations, getReports, listActiveSessions, listAuditLogs, listBills,
   listCategories, listCustomers, listMenu, listProfiles, listPromotions, listTables, moveTableSession,
   openWalkin, subscribeAll, updateBillDetails, updateCategory, updateMenuItem, updateProfile,
-  updatePromotion, markTableReady
+  updatePromotion, markTableReady, registerStaffProfile, listChatLogs
 } from '../lib/api'
 
 const money=(n)=>new Intl.NumberFormat('th-TH',{style:'currency',currency:'THB',maximumFractionDigits:0}).format(Number(n||0))
@@ -95,11 +95,21 @@ export function CustomersPage(){
 }
 
 export function StaffPage(){
-  const [items,setItems]=useState([])
+  const [items,setItems]=useState([]),[adding,setAdding]=useState(false)
+  const [form,setForm]=useState({email:'',display_name:'',role:'staff'})
   async function load(){setItems(await listProfiles())}
   useEffect(()=>{load()},[])
   async function patch(id,p){await updateProfile(id,p);await load()}
-  return <><Head eyebrow="STAFF & ROLES" title="พนักงานและสิทธิ์" desc="กำหนด Role และปิด/เปิดบัญชีพนักงาน"/><div className="admin-card"><div className="table-scroll"><table><thead><tr><th>ชื่อ</th><th>Email</th><th>Role</th><th>สถานะ</th></tr></thead><tbody>{items.map(x=><tr key={x.id}><td><b>{x.display_name||'-'}</b></td><td>{x.email}</td><td><select value={x.role} onChange={e=>patch(x.id,{role:e.target.value})}><option>owner</option><option>manager</option><option>cashier</option><option>kitchen</option><option>staff</option></select></td><td><button className={x.is_active?'pill-btn good':'pill-btn bad'} onClick={()=>patch(x.id,{is_active:!x.is_active})}>{x.is_active?'ใช้งาน':'ปิดบัญชี'}</button></td></tr>)}</tbody></table></div><div className="alert warn">การสร้างบัญชี Login ใหม่ต้องสร้าง Auth User ก่อน แล้วจึงกำหนด Role ในหน้านี้</div></div></>
+  async function bind(e){
+    e.preventDefault()
+    try{
+      await registerStaffProfile(form.email,form.display_name,form.role)
+      setAdding(false);setForm({email:'',display_name:'',role:'staff'});await load()
+    }catch(err){alert(err.message)}
+  }
+  return <><Head eyebrow="STAFF & ROLES" title="พนักงานและสิทธิ์" desc="Owner กำหนด Role, เปิด/ปิดบัญชี และผูก Auth User" action={<button className="btn primary" onClick={()=>setAdding(true)}>+ เพิ่มพนักงาน</button>}/><div className="admin-card"><div className="table-scroll"><table><thead><tr><th>ชื่อ</th><th>Email</th><th>Role</th><th>สถานะ</th></tr></thead><tbody>{items.map(x=><tr key={x.id}><td><b>{x.display_name||'-'}</b></td><td>{x.email}</td><td><select value={x.role} disabled={x.role==='owner'} onChange={e=>patch(x.id,{role:e.target.value})}><option>owner</option><option>manager</option><option>cashier</option><option>kitchen</option><option>staff</option></select></td><td><button disabled={x.role==='owner'} className={x.is_active?'pill-btn good':'pill-btn bad'} onClick={()=>patch(x.id,{is_active:!x.is_active})}>{x.is_active?'ใช้งาน':'ปิดบัญชี'}</button></td></tr>)}</tbody></table></div><div className="alert warn">ก่อนเพิ่มจากหน้านี้ ให้สร้าง User ใน Supabase Authentication ด้วย Email/Password ก่อนหนึ่งครั้ง แล้วกลับมากรอก Email เดิมที่นี่ ระบบจะผูก Role ให้โดย Owner เท่านั้น</div></div>
+    {adding&&<Modal title="เพิ่มพนักงาน" onClose={()=>setAdding(false)}><form className="pro-form" onSubmit={bind}><label>Email<input type="email" required value={form.email} onChange={e=>setForm(x=>({...x,email:e.target.value}))}/></label><label>ชื่อแสดง<input required value={form.display_name} onChange={e=>setForm(x=>({...x,display_name:e.target.value}))}/></label><label>Role<select value={form.role} onChange={e=>setForm(x=>({...x,role:e.target.value}))}><option value="manager">Manager</option><option value="cashier">Cashier</option><option value="kitchen">Kitchen</option><option value="staff">Staff</option></select></label><button className="btn primary span-2">ผูกบัญชีพนักงาน</button></form></Modal>}
+  </>
 }
 
 export function PromotionsPage(){
@@ -114,6 +124,13 @@ export function AuditPage(){
   const [items,setItems]=useState([])
   useEffect(()=>{listAuditLogs().then(setItems)},[])
   return <><Head eyebrow="AUDIT LOG" title="ประวัติการจัดการ" desc="ตรวจสอบว่าใครทำอะไรกับระบบ"/><div className="admin-card"><div className="table-scroll"><table><thead><tr><th>เวลา</th><th>ผู้ใช้</th><th>Action</th><th>ประเภท</th><th>รายละเอียด</th></tr></thead><tbody>{items.map(x=><tr key={x.id}><td>{dt(x.created_at)}</td><td>{x.actor_email||'-'}</td><td><b>{x.action}</b></td><td>{x.entity_type}</td><td><code>{JSON.stringify(x.detail)}</code></td></tr>)}</tbody></table></div></div></>
+}
+
+export function ChatHistoryPage(){
+  const [items,setItems]=useState([]),[q,setQ]=useState('')
+  useEffect(()=>{listChatLogs().then(setItems)},[])
+  const filtered=items.filter(x=>`${x.customer_message} ${x.assistant_message}`.toLowerCase().includes(q.toLowerCase()))
+  return <><Head eyebrow="AI CHAT HISTORY" title="ประวัติ AI Chat" desc="ดูคำถามที่ลูกค้าถามและคำตอบของระบบ"/><div className="admin-card"><input className="admin-search" placeholder="ค้นหาคำถาม..." value={q} onChange={e=>setQ(e.target.value)}/><div className="chat-history-list">{filtered.map(x=><article key={x.id}><div><small>{dt(x.created_at)}</small><b>ลูกค้า: {x.customer_message}</b></div><p>AI: {x.assistant_message||'-'}</p></article>)}</div>{!filtered.length&&<p className="muted">ยังไม่มีประวัติ AI Chat</p>}</div></>
 }
 
 export function ReservationTools(){
