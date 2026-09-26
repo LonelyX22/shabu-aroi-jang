@@ -1269,3 +1269,33 @@ begin
   begin alter publication supabase_realtime add table public.notification_reads; exception when duplicate_object then null; end;
   begin alter publication supabase_realtime add table public.knowledge_base; exception when duplicate_object then null; end;
 end $$;
+
+
+-- Customer billing session payload
+create or replace function public.get_table_session(p_token text)
+returns jsonb
+language plpgsql security definer set search_path=public
+as $session$
+declare
+  s public.table_sessions%rowtype;
+  t public.restaurant_tables%rowtype;
+  b public.bills%rowtype;
+begin
+  select * into s from public.table_sessions where token=upper(trim(p_token)) limit 1;
+  if not found then return null; end if;
+  select * into t from public.restaurant_tables where id=s.table_id;
+  select * into b from public.bills where session_id=s.id limit 1;
+  return jsonb_build_object(
+    'id',s.id,'token',s.token,'status',s.status,'guest_count',s.guest_count,
+    'adult_count',s.adult_count,'child_count',s.child_count,'free_child_count',s.free_child_count,
+    'table_id',t.id,'table_code',t.code,'started_at',s.started_at,'closed_at',s.closed_at,
+    'bill',case when b.id is null then null else jsonb_build_object(
+      'id',b.id,'status',b.status,'guest_count',b.guest_count,'adult_count',b.adult_count,
+      'child_count',b.child_count,'free_child_count',b.free_child_count,
+      'buffet_subtotal',b.buffet_subtotal,'extra_total',b.extra_total,'discount_amount',b.discount_amount,
+      'promotion_code',b.promotion_code,'total',b.total,'payment_method',b.payment_method,
+      'slip_status',b.slip_status,'receipt_number',b.receipt_number,'paid_at',b.paid_at
+    ) end
+  );
+end;
+$session$;
