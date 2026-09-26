@@ -156,10 +156,12 @@ export async function listOrders(){
 
       for(const o of rows){
         const session=o.table_sessions||sessionsById.get(o.session_id)
+        const previous=merged.get(o.id)
         merged.set(o.id,{
+          ...previous,
           ...o,
-          table_code:session?.restaurant_tables?.code||o.table_code||'-',
-          items:o.food_order_items||itemsByOrder.get(o.id)||o.items||[]
+          table_code:session?.restaurant_tables?.code||previous?.table_code||o.table_code||'-',
+          items:(o.food_order_items?.length?o.food_order_items:null)||itemsByOrder.get(o.id)||previous?.items||o.items||[]
         })
       }
     }
@@ -248,9 +250,11 @@ export async function listServiceCalls(){
       }
 
       for(const x of rows){
+        const previous=merged.get(x.id)
         merged.set(x.id,{
+          ...previous,
           ...x,
-          table_code:x.table_sessions?.restaurant_tables?.code||sessionMap.get(x.session_id)||x.table_code||'-'
+          table_code:x.table_sessions?.restaurant_tables?.code||sessionMap.get(x.session_id)||previous?.table_code||x.table_code||'-'
         })
       }
     }
@@ -307,29 +311,48 @@ export async function listBills(){
     .select('*, table_sessions(restaurant_tables(code))')
     .order('created_at',{ascending:false})
 
-  if(!result.error){
-    return (result.data||[]).map(x=>({
-      ...x,
-      table_code:x.table_sessions?.restaurant_tables?.code
-    }))
+  if(result.error){
+    result=await supabase.from('bills').select('*').order('created_at',{ascending:false})
   }
-
-  // Fallback for an older schema/PostgREST relationship cache.
-  result=await supabase.from('bills').select('*').order('created_at',{ascending:false})
   noerr(result.error)
 
   const bills=result.data||[]
-  const sessionIds=[...new Set(bills.map(x=>x.session_id).filter(Boolean))]
-  if(!sessionIds.length)return bills
+  if(!bills.length)return []
 
-  const sessions=await supabase
-    .from('table_sessions')
-    .select('id, restaurant_tables(code)')
-    .in('id',sessionIds)
+  const resolved=new Map()
+  for(const b of bills){
+    const code=b.table_sessions?.restaurant_tables?.code
+    if(code)resolved.set(b.session_id,code)
+  }
 
-  const map=new Map((sessions.data||[]).map(s=>[s.id,s.restaurant_tables?.code]))
-  return bills.map(x=>({...x,table_code:map.get(x.session_id)||'-'}))
+  const missingSessionIds=[...new Set(
+    bills.map(b=>b.session_id).filter(id=>id&&!resolved.has(id))
+  )]
+
+  if(missingSessionIds.length){
+    const sessions=await supabase.from('table_sessions')
+      .select('id,table_id')
+      .in('id',missingSessionIds)
+
+    if(!sessions.error){
+      const tableIds=[...new Set((sessions.data||[]).map(s=>s.table_id).filter(Boolean))]
+      const tables=tableIds.length
+        ? await supabase.from('restaurant_tables').select('id,code').in('id',tableIds)
+        : {data:[],error:null}
+      const tableMap=new Map((tables.data||[]).map(t=>[t.id,t.code]))
+      for(const s of sessions.data||[]){
+        const code=tableMap.get(s.table_id)
+        if(code)resolved.set(s.id,code)
+      }
+    }
+  }
+
+  return bills.map(b=>({
+    ...b,
+    table_code:resolved.get(b.session_id)||b.table_sessions?.restaurant_tables?.code||'-'
+  }))
 }
+
 export async function closeBill(id,paymentMethod){
   if(!supabaseConfigured)return mutate(db=>{
     const b=db.bills.find(x=>x.id===id); if(!b)throw new Error('ไม่พบบิล'); b.status='paid'; b.payment_method=paymentMethod; b.paid_at=now()
@@ -493,8 +516,6 @@ export async function openWalkin(tableId,adultCount,childCount=0,freeChildCount=
 export async function listActiveSessions(){
   if(!supabaseConfigured) return getDemo().sessions.filter(s=>s.status!=='closed')
 
-  // Try the advanced relation first. Older databases may not have
-  // table_session_tables until the production migration is applied.
   let result=await supabase.from('table_sessions')
     .select('*, restaurant_tables(code,seats), table_session_tables(table_id,is_primary,restaurant_tables(code,seats,status))')
     .in('status',['reserved','active','billing'])
@@ -502,24 +523,40 @@ export async function listActiveSessions(){
 
   if(result.error){
     result=await supabase.from('table_sessions')
-      .select('*, restaurant_tables(code,seats)')
+      .select('*')
       .in('status',['reserved','active','billing'])
       .order('created_at',{ascending:false})
   }
 
   noerr(result.error)
-  return (result.data||[]).map(s=>({
-    ...s,
-    table_code:s.restaurant_tables?.code,
-    table_seats:s.restaurant_tables?.seats,
-    linked_tables:(s.table_session_tables||[]).map(x=>({
-      ...x,
-      code:x.restaurant_tables?.code,
-      seats:x.restaurant_tables?.seats,
-      status:x.restaurant_tables?.status
-    }))
-  }))
+  const rows=result.data||[]
+  if(!rows.length)return []
+
+  const tableIds=[...new Set(rows.map(s=>s.table_id).filter(Boolean))]
+  let tableMap=new Map()
+  if(tableIds.length){
+    const tables=await supabase.from('restaurant_tables')
+      .select('id,code,seats,status')
+      .in('id',tableIds)
+    if(!tables.error)tableMap=new Map((tables.data||[]).map(t=>[t.id,t]))
+  }
+
+  return rows.map(s=>{
+    const primary=s.restaurant_tables?.code?s.restaurant_tables:tableMap.get(s.table_id)
+    return {
+      ...s,
+      table_code:primary?.code||'-',
+      table_seats:primary?.seats,
+      linked_tables:(s.table_session_tables||[]).map(x=>({
+        ...x,
+        code:x.restaurant_tables?.code,
+        seats:x.restaurant_tables?.seats,
+        status:x.restaurant_tables?.status
+      }))
+    }
+  })
 }
+
 export async function moveTableSession(sessionId,newTableId){
   const {data,error}=await supabase.rpc('move_table_session',{p_session_id:sessionId,p_new_table_id:newTableId}); noerr(error); return data
 }
