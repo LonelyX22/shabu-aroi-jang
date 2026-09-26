@@ -417,13 +417,50 @@ function ReviewsAdmin(){
 function SettingsAdmin({settings,onChange}){
   const [form,setForm]=useState(settings||{}); useEffect(()=>setForm(settings||{}),[settings])
   async function mode(v){const patch=v==='open'?{force_open:true,force_closed:false}:v==='closed'?{force_open:false,force_closed:true}:{force_open:false,force_closed:false};const next=await updateSettings(patch);setForm(next);onChange(next)}
-  async function save(e){e.preventDefault();const next=await updateSettings({open_time:form.open_time||'11:00',close_time:form.close_time||'22:00',buffet_price:Number(form.buffet_price||299),promptpay:form.promptpay||SHOP.promptpay});setForm(next);onChange(next);alert('บันทึกแล้ว')}
+  async function save(e){
+    e.preventDefault()
+    const next=await updateSettings({
+      open_time:form.open_time||'11:00',close_time:form.close_time||'22:00',
+      buffet_price:Number(form.buffet_price||299),child_price:Number(form.child_price||149),
+      dining_minutes:Number(form.dining_minutes||120),reservation_grace_minutes:Number(form.reservation_grace_minutes||15),
+      free_child_height_cm:Number(form.free_child_height_cm||90),child_max_height_cm:Number(form.child_max_height_cm||120),
+      promptpay:form.promptpay||SHOP.promptpay,bank_name:form.bank_name||null,bank_account_name:form.bank_account_name||null,bank_account_number:form.bank_account_number||null,
+      facebook:form.facebook||null,line_id:form.line_id||null,instagram:form.instagram||null,google_maps_url:form.google_maps_url||null,
+      phone:form.phone||SHOP.phone,address_th:form.address_th||SHOP.addressTh
+    })
+    setForm(next);onChange(next);alert('บันทึกแล้ว')
+  }
   const modeValue=form.force_open?'open':form.force_closed?'closed':'auto'
-  return <><AdminHead eyebrow="SETTINGS" title="ตั้งค่าร้าน" desc="เปิด/ปิดร้าน Manual เหมือนระบบร้านน้ำ"/><div className="admin-grid two"><section className="admin-card"><h2>สถานะร้าน</h2><p className="muted">Manual จะ Override เวลาเปิด–ปิดปกติ</p><div className="shop-mode">
-    <button className={modeValue==='open'?'active open':''} onClick={()=>mode('open')}><span>🟢</span><b>เปิดร้าน</b><small>เปิดรับลูกค้าทันที</small></button>
-    <button className={modeValue==='auto'?'active auto':''} onClick={()=>mode('auto')}><span>🕒</span><b>ตามเวลา</b><small>{String(form.open_time||'11:00').slice(0,5)}–{String(form.close_time||'22:00').slice(0,5)}</small></button>
-    <button className={modeValue==='closed'?'active closed':''} onClick={()=>mode('closed')}><span>🔴</span><b>ปิดร้าน</b><small>หยุดรับลูกค้าชั่วคราว</small></button>
-  </div></section><section className="admin-card"><h2>ข้อมูลการขาย</h2><form className="settings-form" onSubmit={save}><label>เวลาเปิด<input type="time" value={String(form.open_time||'11:00').slice(0,5)} onChange={e=>setForm(f=>({...f,open_time:e.target.value}))}/></label><label>เวลาปิด<input type="time" value={String(form.close_time||'22:00').slice(0,5)} onChange={e=>setForm(f=>({...f,close_time:e.target.value}))}/></label><label>ราคาผู้ใหญ่<input type="number" value={form.buffet_price||299} onChange={e=>setForm(f=>({...f,buffet_price:e.target.value}))}/></label><label>PromptPay<input value={form.promptpay||''} onChange={e=>setForm(f=>({...f,promptpay:e.target.value}))}/></label><button className="btn primary">บันทึกการตั้งค่า</button></form></section></div></>
+  return <><AdminHead eyebrow="SETTINGS" title="ตั้งค่าร้าน" desc="ตั้งสถานะร้าน ราคา เวลา ข้อมูลติดต่อ เด็ก และ Payment"/>
+    <div className="admin-grid two">
+      <section className="admin-card"><h2>สถานะร้าน</h2><p className="muted">Manual จะ Override เวลาเปิด–ปิดปกติ</p><div className="shop-mode">
+        <button className={modeValue==='open'?'active open':''} onClick={()=>mode('open')}><span>🟢</span><b>เปิดร้าน</b><small>เปิดรับลูกค้าทันที</small></button>
+        <button className={modeValue==='auto'?'active auto':''} onClick={()=>mode('auto')}><span>🕒</span><b>ตามเวลา</b><small>{String(form.open_time||'11:00').slice(0,5)}–{String(form.close_time||'22:00').slice(0,5)}</small></button>
+        <button className={modeValue==='closed'?'active closed':''} onClick={()=>mode('closed')}><span>🔴</span><b>ปิดร้าน</b><small>หยุดรับลูกค้าชั่วคราว</small></button>
+      </div></section>
+      <section className="admin-card"><h2>กติกาการขาย</h2><form className="settings-form" onSubmit={save}>
+        <label>เวลาเปิด<input type="time" value={String(form.open_time||'11:00').slice(0,5)} onChange={e=>setForm(f=>({...f,open_time:e.target.value}))}/></label>
+        <label>เวลาปิด<input type="time" value={String(form.close_time||'22:00').slice(0,5)} onChange={e=>setForm(f=>({...f,close_time:e.target.value}))}/></label>
+        <label>ราคาผู้ใหญ่<input type="number" value={form.buffet_price??299} onChange={e=>setForm(f=>({...f,buffet_price:e.target.value}))}/></label>
+        <label>ราคาเด็ก<input type="number" value={form.child_price??149} onChange={e=>setForm(f=>({...f,child_price:e.target.value}))}/></label>
+        <label>เวลาทาน (นาที)<input type="number" value={form.dining_minutes??120} onChange={e=>setForm(f=>({...f,dining_minutes:e.target.value}))}/></label>
+        <label>สายได้ (นาที)<input type="number" value={form.reservation_grace_minutes??15} onChange={e=>setForm(f=>({...f,reservation_grace_minutes:e.target.value}))}/></label>
+        <label>ต่ำกว่าส่วนสูงนี้ฟรี (ซม.)<input type="number" value={form.free_child_height_cm??90} onChange={e=>setForm(f=>({...f,free_child_height_cm:e.target.value}))}/></label>
+        <label>เด็กไม่เกิน (ซม.)<input type="number" value={form.child_max_height_cm??120} onChange={e=>setForm(f=>({...f,child_max_height_cm:e.target.value}))}/></label>
+        <label>PromptPay<input value={form.promptpay||''} onChange={e=>setForm(f=>({...f,promptpay:e.target.value}))}/></label>
+        <label>ธนาคาร<input value={form.bank_name||''} onChange={e=>setForm(f=>({...f,bank_name:e.target.value}))}/></label>
+        <label>ชื่อบัญชี<input value={form.bank_account_name||''} onChange={e=>setForm(f=>({...f,bank_account_name:e.target.value}))}/></label>
+        <label>เลขบัญชี<input value={form.bank_account_number||''} onChange={e=>setForm(f=>({...f,bank_account_number:e.target.value}))}/></label>
+        <label>เบอร์ร้าน<input value={form.phone||''} onChange={e=>setForm(f=>({...f,phone:e.target.value}))}/></label>
+        <label>Facebook<input value={form.facebook||''} onChange={e=>setForm(f=>({...f,facebook:e.target.value}))}/></label>
+        <label>LINE<input value={form.line_id||''} onChange={e=>setForm(f=>({...f,line_id:e.target.value}))}/></label>
+        <label>Instagram<input value={form.instagram||''} onChange={e=>setForm(f=>({...f,instagram:e.target.value}))}/></label>
+        <label className="span-2">Google Maps URL<input value={form.google_maps_url||''} onChange={e=>setForm(f=>({...f,google_maps_url:e.target.value}))}/></label>
+        <label className="span-2">ที่อยู่<textarea value={form.address_th||''} onChange={e=>setForm(f=>({...f,address_th:e.target.value}))}/></label>
+        <button className="btn primary span-2">บันทึกการตั้งค่า</button>
+      </form></section>
+    </div>
+  </>
 }
 
 function Protected({session,profile,roles,children}){
