@@ -6,7 +6,7 @@ import {
   createServiceCall, getAdminSession, getCurrentProfile, getReservation, getSession, getSettings, listBills, listMenu,
   listOrders, listReservations, listReviews, listServiceCalls, listSessionOrders, listTables, login,
   logout, markTableReady, rejectReservation, requestBill, resolveServiceCall, shopIsOpen, submitReview,
-  subscribeAll, updateOrderStatus, updateSettings
+  subscribeAll, updateOrderStatus, updateSettings, expireReservations, updateReservationAdmin
 } from './lib/api'
 import { MENU, ORDER_FLOW, ORDER_LABEL, SHOP, TABLE_LABEL } from './lib/constants'
 import { supabaseConfigured } from './lib/supabase'
@@ -303,15 +303,28 @@ function Dashboard(){
 }
 
 function ReservationsAdmin(){
-  const [items,setItems]=useState([]),[tables,setTables]=useState([]),[selected,setSelected]=useState({}),[qrItem,setQrItem]=useState(null)
+  const [items,setItems]=useState([]),[tables,setTables]=useState([]),[selected,setSelected]=useState({}),[qrItem,setQrItem]=useState(null),[editItem,setEditItem]=useState(null)
   async function load(){const [r,tb]=await Promise.all([listReservations(),listTables()]);setItems(r);setTables(tb)}
   useEffect(()=>{load();return subscribeAll(load)},[])
   async function confirmOne(r){const tableId=selected[r.id];if(!tableId)return alert('เลือกโต๊ะก่อน');await confirmReservation(r.id,tableId);await load()}
   async function rejectOne(id){if(confirm('ไม่อนุมัติการจองนี้?')){await rejectReservation(id);await load()}}
+  async function expireOld(){const n=await expireReservations();alert(`อัปเดตการจองหมดเวลา ${n||0} รายการ`);await load()}
+  async function saveEdit(){
+    await updateReservationAdmin(editItem.id,{
+      customer_name:editItem.customer_name,
+      customer_phone:editItem.customer_phone,
+      reservation_date:editItem.reservation_date,
+      reservation_time:editItem.reservation_time,
+      guest_count:Number(editItem.guest_count),
+      note:editItem.note||''
+    })
+    setEditItem(null);await load()
+  }
+  async function cancelOne(r){if(!confirm('ยกเลิกการจองนี้?'))return;await updateReservationAdmin(r.id,{status:'cancelled'});await load()}
   const available=tables.filter(x=>x.status==='available')
   const qrUrl=qrItem?.session_token?`${window.location.origin}/shabu-aroi-jang/table/${qrItem.session_token}`:''
   return <>
-    <AdminHead eyebrow="RESERVATIONS" title="การจองโต๊ะ" desc="เลือกรับ กำหนดโต๊ะ และเปิดดู QR ของลูกค้า"/>
+    <AdminHead eyebrow="RESERVATIONS" title="การจองโต๊ะ" desc="ยืนยัน แก้ไข ยกเลิก ตรวจหมดเวลา และจัดการ QR" action={<button className="btn ghost" onClick={expireOld}>⏱ ตรวจรายการเลยเวลา</button>}/>
     <div className="admin-card"><div className="admin-list reservations">
       {items.map(r=><div key={r.id}>
         <span>
@@ -325,18 +338,22 @@ function ReservationsAdmin(){
               <option value="">เลือกโต๊ะ</option>
               {available.filter(t=>t.seats>=Number(r.guest_count||1)).map(t=><option key={t.id} value={t.id}>{t.code} ({t.seats} ที่)</option>)}
             </select>
+            <button className="mini-btn" onClick={()=>setEditItem({...r,reservation_time:String(r.reservation_time||'').slice(0,5)})}>แก้ไข</button>
             <button className="mini-btn ok" onClick={()=>confirmOne(r)}>ยืนยัน</button>
             <button className="mini-btn danger" onClick={()=>rejectOne(r.id)}>ปฏิเสธ</button>
           </>:<>
             <span className={`reservation-state ${r.status}`}>{r.status}</span>
             {r.status==='confirmed'&&r.session_token&&<button className="mini-btn qr" onClick={()=>setQrItem(r)}>ดู QR</button>}
+            {['confirmed'].includes(r.status)&&<button className="mini-btn danger" onClick={()=>cancelOne(r)}>ยกเลิก</button>}
           </>}
         </div>
       </div>)}
       {!items.length&&<p className="muted">ยังไม่มีการจอง</p>}
     </div></div>
 
-    {qrItem&&<div className="modal-backdrop" onClick={()=>setQrItem(null)}>
+    {editItem&&<div className="modal-backdrop" onClick={()=>setEditItem(null)}><div className="pro-modal" onClick={e=>e.stopPropagation()}><button className="modal-close" onClick={()=>setEditItem(null)}>×</button><h2>แก้ไขการจอง {editItem.code}</h2><div className="pro-form"><label>ชื่อ<input value={editItem.customer_name} onChange={e=>setEditItem(x=>({...x,customer_name:e.target.value}))}/></label><label>เบอร์โทร<input value={editItem.customer_phone} onChange={e=>setEditItem(x=>({...x,customer_phone:e.target.value.replace(/\D/g,'').slice(0,10)}))}/></label><label>วันที่<input type="date" value={editItem.reservation_date} onChange={e=>setEditItem(x=>({...x,reservation_date:e.target.value}))}/></label><label>เวลา<input type="time" value={editItem.reservation_time} onChange={e=>setEditItem(x=>({...x,reservation_time:e.target.value}))}/></label><label>จำนวนคน<input type="number" min="1" max="10" value={editItem.guest_count} onChange={e=>setEditItem(x=>({...x,guest_count:e.target.value}))}/></label><label>หมายเหตุ<input value={editItem.note||''} onChange={e=>setEditItem(x=>({...x,note:e.target.value}))}/></label><button className="btn primary span-2" onClick={saveEdit}>บันทึก</button></div></div></div>}
+
+    {qrItem&&<div className="modal-backdrop qr-print-area" onClick={()=>setQrItem(null)}>
       <div className="qr-admin-modal" onClick={e=>e.stopPropagation()}>
         <button className="modal-close" onClick={()=>setQrItem(null)}>×</button>
         <span className="eyebrow">TABLE QR</span>
@@ -346,7 +363,8 @@ function ReservationsAdmin(){
         <small>สแกนเพื่อเปิดหน้าสั่งอาหารของโต๊ะนี้</small>
         <div className="qr-modal-actions">
           <a className="btn dark" href={qrUrl} target="_blank" rel="noreferrer">เปิดหน้าสั่งอาหาร</a>
-          <button className="btn ghost" onClick={()=>navigator.clipboard?.writeText(qrUrl)}>คัดลอกลิงก์ QR</button>
+          <button className="btn ghost" onClick={()=>navigator.clipboard?.writeText(qrUrl)}>คัดลอกลิงก์</button>
+          <button className="btn primary" onClick={()=>window.print()}>🖨 พิมพ์ QR</button>
         </div>
       </div>
     </div>}
