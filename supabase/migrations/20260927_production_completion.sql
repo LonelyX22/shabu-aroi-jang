@@ -171,7 +171,7 @@ for select to authenticated using(public.has_role(array['owner']));
 
 drop policy if exists chat_admin_read on public.chat_logs;
 create policy chat_admin_read on public.chat_logs
-for select to authenticated using(public.is_admin());
+for select to authenticated using(public.has_role(array['owner','manager']));
 
 create or replace function public.log_audit(
   p_action text,
@@ -190,6 +190,80 @@ begin
   values(auth.uid(),v_email,p_action,p_entity_type,p_entity_id,p_detail);
 end;
 $$;
+
+
+create or replace function public.register_staff_profile(
+  p_email text,
+  p_display_name text,
+  p_role text
+)
+returns jsonb
+language plpgsql security definer set search_path=public
+as $
+declare
+  u auth.users%rowtype;
+  p public.profiles%rowtype;
+begin
+  if not public.has_role(array['owner']) then raise exception 'Owner only'; end if;
+  if p_role not in ('manager','cashier','kitchen','staff') then raise exception 'Role ไม่ถูกต้อง'; end if;
+  select * into u from auth.users where lower(email)=lower(trim(p_email)) limit 1;
+  if not found then raise exception 'ยังไม่พบ Auth User อีเมลนี้ กรุณาสร้าง User ใน Authentication ก่อน'; end if;
+
+  insert into public.profiles(id,email,display_name,role,is_active)
+  values(u.id,u.email,coalesce(nullif(trim(p_display_name),''),split_part(u.email,'@',1)),p_role,true)
+  on conflict(id) do update set
+    email=excluded.email,display_name=excluded.display_name,role=excluded.role,is_active=true
+  returning * into p;
+
+  perform public.log_audit('register_staff','profile',p.id::text,jsonb_build_object('email',p.email,'role',p.role));
+  return to_jsonb(p);
+end;
+$;
+
+create or replace function public.log_chat(
+  p_session_key text,
+  p_customer_message text,
+  p_assistant_message text
+)
+returns void
+language plpgsql security definer set search_path=public
+as $
+begin
+  if length(trim(coalesce(p_customer_message,'')))=0 then return; end if;
+  insert into public.chat_logs(session_key,customer_message,assistant_message)
+  values(left(coalesce(p_session_key,''),80),left(p_customer_message,1000),left(coalesce(p_assistant_message,''),3000));
+end;
+$;
+
+create or replace function public.audit_row_change()
+returns trigger
+language plpgsql security definer set search_path=public
+as $
+declare
+  v_email text;
+  v_id text;
+begin
+  select email into v_email from auth.users where id=auth.uid();
+  v_id := coalesce((case when tg_op='DELETE' then old.id::text else new.id::text end),'');
+  insert into public.audit_logs(actor_id,actor_email,action,entity_type,entity_id,detail)
+  values(auth.uid(),v_email,lower(tg_op),tg_table_name,v_id,
+    case when tg_op='DELETE' then to_jsonb(old) else to_jsonb(new) end);
+  return case when tg_op='DELETE' then old else new end;
+end;
+$;
+
+drop trigger if exists audit_shop_settings on public.shop_settings;
+create trigger audit_shop_settings after update on public.shop_settings
+for each row execute function public.audit_row_change();
+drop trigger if exists audit_menu_items on public.menu_items;
+create trigger audit_menu_items after insert or update or delete on public.menu_items
+for each row execute function public.audit_row_change();
+drop trigger if exists audit_promotions on public.promotions;
+create trigger audit_promotions after insert or update or delete on public.promotions
+for each row execute function public.audit_row_change();
+drop trigger if exists audit_profiles on public.profiles;
+create trigger audit_profiles after update on public.profiles
+for each row execute function public.audit_row_change();
 
 create or replace function public.open_walkin_session(
   p_table_id uuid,
@@ -501,6 +575,8 @@ grant execute on function public.update_bill_details(uuid,integer,integer,intege
 grant execute on function public.expire_old_reservations() to authenticated;
 grant execute on function public.cancel_reservation_admin(uuid) to authenticated;
 grant execute on function public.log_audit(text,text,text,jsonb) to authenticated;
+grant execute on function public.register_staff_profile(text,text,text) to authenticated;
+grant execute on function public.log_chat(text,text,text) to anon,authenticated;
 
 do $$
 begin
