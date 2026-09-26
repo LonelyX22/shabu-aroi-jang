@@ -2071,3 +2071,77 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;whit
   .luxe-site .premium-page .chat-log{min-height:430px;padding:18px!important}
   .luxe-site .premium-page .bubble-msg{max-width:88%}
 }
+
+
+/* === CONVERSATIONAL AI CHAT v6 === */
+.luxe-site .premium-page .chat-tools{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  padding:13px 16px;
+  background:linear-gradient(180deg,rgba(45,23,17,.92),rgba(28,14,11,.94));
+  border-bottom:1px solid rgba(240,208,139,.09);
+  color:#d8b878;
+  font-size:11px;
+  font-weight:900;
+  letter-spacing:.08em;
+}
+.luxe-site .premium-page .chat-tools button{
+  border:1px solid rgba(240,208,139,.14);
+  background:rgba(255,255,255,.035);
+  color:#bda99a;
+  padding:8px 11px;
+  border-radius:10px;
+  font-size:11px;
+  font-weight:800;
+  cursor:pointer;
+}
+.luxe-site .premium-page .chat-tools button:hover{
+  color:#ffe1a9;
+  border-color:rgba(240,208,139,.28);
+}
+.luxe-site .premium-page .chat-suggestions{
+  display:flex;
+  gap:8px;
+  overflow:auto;
+  padding:13px 15px 4px;
+  background:linear-gradient(180deg,#1a0d0a,#160b08);
+  scrollbar-width:thin;
+}
+.luxe-site .premium-page .chat-suggestions button{
+  flex:none;
+  max-width:330px;
+  border:1px solid rgba(240,208,139,.11);
+  background:rgba(63,34,25,.48);
+  color:#cdb8a8;
+  border-radius:999px;
+  padding:9px 13px;
+  font-size:10px;
+  font-weight:800;
+  white-space:nowrap;
+  cursor:pointer;
+  transition:.2s ease;
+}
+.luxe-site .premium-page .chat-suggestions button:hover{
+  background:rgba(91,47,33,.62);
+  color:#ffe1a7;
+  border-color:rgba(240,208,139,.25);
+}
+.luxe-site .premium-page .chat-suggestions button:disabled{
+  opacity:.45;
+  cursor:not-allowed;
+}
+.luxe-site .premium-page .chat-input{
+  padding-top:12px!important;
+}
+.luxe-site .premium-page .chat-input .btn:disabled{
+  opacity:.5;
+  cursor:not-allowed;
+  transform:none;
+}
+@media(max-width:640px){
+  .luxe-site .premium-page .chat-tools{padding:11px 12px}
+  .luxe-site .premium-page .chat-suggestions{padding-left:11px;padding-right:11px}
+  .luxe-site .premium-page .chat-suggestions button{max-width:285px}
+}
