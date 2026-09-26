@@ -208,9 +208,21 @@ export async function askAi(message){
   try {
     const {data,error}=await supabase.functions.invoke('ai-chat',{body:{message}})
     if(error) throw error
-    return data?.answer || fallback()
+    const answer=data?.answer || fallback()
+    try{
+      const key=localStorage.getItem('shabu-chat-key')||crypto.randomUUID()
+      localStorage.setItem('shabu-chat-key',key)
+      await supabase.rpc('log_chat',{p_session_key:key,p_customer_message:message,p_assistant_message:answer})
+    }catch{}
+    return answer
   } catch {
-    return fallback()
+    const answer=fallback()
+    try{
+      const key=localStorage.getItem('shabu-chat-key')||crypto.randomUUID()
+      localStorage.setItem('shabu-chat-key',key)
+      await supabase.rpc('log_chat',{p_session_key:key,p_customer_message:message,p_assistant_message:answer})
+    }catch{}
+    return answer
   }
 }
 
@@ -346,4 +358,14 @@ export async function cancelReservationAdmin(id){
     return r
   })
   const {data,error}=await supabase.rpc('cancel_reservation_admin',{p_reservation_id:id}); noerr(error); return data
+}
+
+
+export async function registerStaffProfile(email,displayName,role){
+  if(!supabaseConfigured) return {email,display_name:displayName,role,is_active:true}
+  const {data,error}=await supabase.rpc('register_staff_profile',{p_email:email,p_display_name:displayName,p_role:role}); noerr(error); return data
+}
+export async function listChatLogs(){
+  if(!supabaseConfigured) return []
+  const {data,error}=await supabase.from('chat_logs').select('*').order('created_at',{ascending:false}).limit(300); noerr(error); return data||[]
 }
