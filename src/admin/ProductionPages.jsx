@@ -38,17 +38,22 @@ function CategoryManager({cats,onClose,onChanged}){
 }
 
 export function TablesManager(){
-  const [tables,setTables]=useState([]),[sessions,setSessions]=useState([]),[walkin,setWalkin]=useState(null),[move,setMove]=useState(null)
+  const [tables,setTables]=useState([]),[sessions,setSessions]=useState([]),[walkin,setWalkin]=useState(null),[move,setMove]=useState(null),[qrSession,setQrSession]=useState(null)
   const [counts,setCounts]=useState({adult:2,child:0,free:0})
   async function load(){const [t,s]=await Promise.all([listTables(),listActiveSessions()]);setTables(t);setSessions(s)}
   useEffect(()=>{load();return subscribeAll(load)},[])
-  async function open(){await openWalkin(walkin.id,counts.adult,counts.child,counts.free);setWalkin(null);await load()}
+  async function open(){
+    const created=await openWalkin(walkin.id,counts.adult,counts.child,counts.free)
+    setWalkin(null);setQrSession(created);setCounts({adult:2,child:0,free:0});await load()
+  }
   async function moveNow(newId){await moveTableSession(move.id,newId);setMove(null);await load()}
   const activeByTable=new Map(sessions.map(s=>[s.table_id,s]))
-  return <><Head eyebrow="TABLE OPERATIONS" title="จัดการโต๊ะ / Walk-in" desc="เปิดโต๊ะลูกค้า Walk-in, ย้ายโต๊ะ และคืนโต๊ะหลังทำความสะอาด"/>
-    <div className="floor-grid">{tables.map(t=>{const s=activeByTable.get(t.id);return <article className={`table-tile ${t.status}`} key={t.id}><div className="table-icon">🍲</div><h2>{t.code}</h2><p>{t.seats} ที่นั่ง</p><span className={`status status-${t.status}`}>{t.status}</span>{s&&<small>{s.guest_count} คน • {s.status}</small>}<div className="table-actions">{t.status==='available'&&<button className="mini-btn ok" onClick={()=>setWalkin(t)}>+ Walk-in</button>}{s&&<button className="mini-btn qr" onClick={()=>setMove(s)}>ย้ายโต๊ะ</button>}{t.status==='cleaning'&&<button className="mini-btn ok" onClick={async()=>{await markTableReady(t.id);load()}}>พร้อมใช้งาน</button>}</div></article>})}</div>
+  const qrUrl=qrSession?.token?`${window.location.origin}/shabu-aroi-jang/table/${qrSession.token}`:''
+  return <><Head eyebrow="TABLE OPERATIONS" title="จัดการโต๊ะ / Walk-in" desc="เปิดโต๊ะลูกค้า Walk-in, ย้ายโต๊ะ, ดู QR และคืนโต๊ะหลังทำความสะอาด"/>
+    <div className="floor-grid">{tables.map(t=>{const s=activeByTable.get(t.id);return <article className={`table-tile ${t.status}`} key={t.id}><div className="table-icon">🍲</div><h2>{t.code}</h2><p>{t.seats} ที่นั่ง</p><span className={`status status-${t.status}`}>{t.status}</span>{s&&<small>{s.guest_count} คน • {s.status}</small>}<div className="table-actions">{t.status==='available'&&<button className="mini-btn ok" onClick={()=>setWalkin(t)}>+ Walk-in</button>}{s&&<button className="mini-btn qr" onClick={()=>setQrSession(s)}>ดู QR</button>}{s&&<button className="mini-btn" onClick={()=>setMove(s)}>ย้ายโต๊ะ</button>}{t.status==='cleaning'&&<button className="mini-btn ok" onClick={async()=>{await markTableReady(t.id);load()}}>พร้อมใช้งาน</button>}</div></article>})}</div>
     {walkin&&<Modal title={`เปิดโต๊ะ ${walkin.code}`} onClose={()=>setWalkin(null)}><div className="pro-form"><label>ผู้ใหญ่<input type="number" min="0" value={counts.adult} onChange={e=>setCounts(c=>({...c,adult:Number(e.target.value)}))}/></label><label>เด็ก 90–120 ซม.<input type="number" min="0" value={counts.child} onChange={e=>setCounts(c=>({...c,child:Number(e.target.value)}))}/></label><label>เด็กต่ำกว่า 90 ซม.<input type="number" min="0" value={counts.free} onChange={e=>setCounts(c=>({...c,free:Number(e.target.value)}))}/></label><div className="span-2 total-preview">รวม {counts.adult+counts.child+counts.free} คน • ประมาณ {money(counts.adult*299+counts.child*149)}</div><button className="btn primary span-2" onClick={open}>เปิดโต๊ะและสร้าง QR</button></div></Modal>}
     {move&&<Modal title={`ย้ายโต๊ะ ${move.table_code}`} onClose={()=>setMove(null)}><div className="simple-list">{tables.filter(t=>t.status==='available'&&t.seats>=move.guest_count).map(t=><div key={t.id}><span><b>{t.code}</b><small>{t.seats} ที่นั่ง</small></span><button className="mini-btn ok" onClick={()=>moveNow(t.id)}>ย้ายมาที่นี่</button></div>)}</div></Modal>}
+    {qrSession&&<Modal title={`QR โต๊ะ ${qrSession.table_code||'-'}`} onClose={()=>setQrSession(null)}><div className="admin-qr-box"><QRCodeSVG value={qrUrl} size={250}/></div><p className="muted">Session นี้ใช้สั่งอาหาร เรียกพนักงาน และเช็คบิล</p><div className="qr-modal-actions"><a className="btn dark" href={qrUrl} target="_blank" rel="noreferrer">เปิดหน้าสั่งอาหาร</a><button className="btn ghost" onClick={()=>navigator.clipboard?.writeText(qrUrl)}>คัดลอกลิงก์</button><button className="btn primary" onClick={()=>window.print()}>🖨 พิมพ์ QR</button></div></Modal>}
   </>
 }
 
