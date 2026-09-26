@@ -213,3 +213,110 @@ export async function askAi(message){
     return fallback()
   }
 }
+
+
+// ----- Production admin helpers -----
+export async function listCategories(){
+  if(!supabaseConfigured) return [...new Set(getDemo().menu.map(x=>x.category))].map((name_th,i)=>({id:'demo-cat-'+i,name_th,name_en:name_th,sort_order:i+1,is_active:true}))
+  const {data,error}=await supabase.from('menu_categories').select('*').order('sort_order'); noerr(error); return data||[]
+}
+export async function createCategory(payload){
+  if(!supabaseConfigured) return payload
+  const {data,error}=await supabase.from('menu_categories').insert(payload).select().single(); noerr(error); return data
+}
+export async function updateCategory(id,payload){
+  if(!supabaseConfigured) return payload
+  const {data,error}=await supabase.from('menu_categories').update(payload).eq('id',id).select().single(); noerr(error); return data
+}
+export async function deleteCategory(id){
+  if(!supabaseConfigured) return
+  const {error}=await supabase.from('menu_categories').delete().eq('id',id); noerr(error)
+}
+export async function createMenuItem(payload){
+  if(!supabaseConfigured) return mutate(db=>{const x={id:rid('m'),is_available:true,...payload};db.menu.push(x);return x})
+  const {data,error}=await supabase.from('menu_items').insert(payload).select().single(); noerr(error); return data
+}
+export async function updateMenuItem(id,payload){
+  if(!supabaseConfigured) return mutate(db=>{const x=db.menu.find(m=>m.id===id);Object.assign(x,payload);return x})
+  const {data,error}=await supabase.from('menu_items').update(payload).eq('id',id).select().single(); noerr(error); return data
+}
+export async function deleteMenuItem(id){
+  if(!supabaseConfigured) return mutate(db=>{db.menu=db.menu.filter(m=>m.id!==id)})
+  const {error}=await supabase.from('menu_items').delete().eq('id',id); noerr(error)
+}
+export async function listProfiles(){
+  if(!supabaseConfigured) return [{id:'demo-owner',email:'demo@shabu.local',display_name:'Owner',role:'owner',is_active:true}]
+  const {data,error}=await supabase.from('profiles').select('*').order('created_at'); noerr(error); return data||[]
+}
+export async function updateProfile(id,payload){
+  if(!supabaseConfigured) return payload
+  const {data,error}=await supabase.from('profiles').update(payload).eq('id',id).select().single(); noerr(error); return data
+}
+export async function listPromotions(){
+  if(!supabaseConfigured) return []
+  const {data,error}=await supabase.from('promotions').select('*').order('created_at',{ascending:false}); noerr(error); return data||[]
+}
+export async function createPromotion(payload){
+  const {data,error}=await supabase.from('promotions').insert(payload).select().single(); noerr(error); return data
+}
+export async function updatePromotion(id,payload){
+  const {data,error}=await supabase.from('promotions').update(payload).eq('id',id).select().single(); noerr(error); return data
+}
+export async function deletePromotion(id){
+  const {error}=await supabase.from('promotions').delete().eq('id',id); noerr(error)
+}
+export async function listAuditLogs(){
+  if(!supabaseConfigured) return []
+  const {data,error}=await supabase.from('audit_logs').select('*').order('created_at',{ascending:false}).limit(300); noerr(error); return data||[]
+}
+export async function openWalkin(tableId,adultCount,childCount=0,freeChildCount=0){
+  if(!supabaseConfigured) return mutate(db=>{
+    const t=db.tables.find(x=>x.id===tableId);if(!t||t.status!=='available')throw new Error('โต๊ะไม่ว่าง')
+    const guest=Number(adultCount)+Number(childCount)+Number(freeChildCount)
+    const token=crypto.randomUUID().replaceAll('-','').slice(0,16).toUpperCase()
+    const s={id:rid('s'),token,table_id:t.id,table_code:t.code,status:'active',guest_count:guest,adult_count:Number(adultCount),child_count:Number(childCount),free_child_count:Number(freeChildCount),started_at:now(),created_at:now()}
+    db.sessions.push(s);t.status='occupied';return s
+  })
+  const {data,error}=await supabase.rpc('open_walkin_session',{p_table_id:tableId,p_adult_count:Number(adultCount),p_child_count:Number(childCount),p_free_child_count:Number(freeChildCount)}); noerr(error); return data
+}
+export async function listActiveSessions(){
+  if(!supabaseConfigured) return getDemo().sessions.filter(s=>s.status!=='closed')
+  const {data,error}=await supabase.from('table_sessions').select('*, restaurant_tables(code,seats)').in('status',['reserved','active','billing']).order('created_at',{ascending:false}); noerr(error)
+  return (data||[]).map(s=>({...s,table_code:s.restaurant_tables?.code,table_seats:s.restaurant_tables?.seats}))
+}
+export async function moveTableSession(sessionId,newTableId){
+  const {data,error}=await supabase.rpc('move_table_session',{p_session_id:sessionId,p_new_table_id:newTableId}); noerr(error); return data
+}
+export async function updateBillDetails(id,payload){
+  if(!supabaseConfigured) return mutate(db=>{const b=db.bills.find(x=>x.id===id);Object.assign(b,payload);b.total=Number(payload.adult_count)*299+Number(payload.child_count)*149-Number(payload.discount_amount||0);return b})
+  const {data,error}=await supabase.rpc('update_bill_details',{
+    p_bill_id:id,p_adult_count:Number(payload.adult_count||0),p_child_count:Number(payload.child_count||0),
+    p_free_child_count:Number(payload.free_child_count||0),p_discount_amount:Number(payload.discount_amount||0),
+    p_promotion_code:payload.promotion_code||null,p_note:payload.note||''
+  }); noerr(error); return data
+}
+export async function expireReservations(){
+  if(!supabaseConfigured) return 0
+  const {data,error}=await supabase.rpc('expire_old_reservations'); noerr(error); return data
+}
+export async function listCustomers(){
+  if(!supabaseConfigured) return []
+  const {data,error}=await supabase.from('reservations').select('customer_name,customer_phone,created_at,status,guest_count').order('created_at',{ascending:false}); noerr(error)
+  const map=new Map()
+  for(const r of data||[]){
+    const k=r.customer_phone
+    const x=map.get(k)||{customer_phone:k,customer_name:r.customer_name,visits:0,reservations:0,total_guests:0,last_seen:r.created_at}
+    x.reservations++;x.total_guests+=Number(r.guest_count||0);if(r.status==='confirmed')x.visits++;if(new Date(r.created_at)>new Date(x.last_seen))x.last_seen=r.created_at
+    map.set(k,x)
+  }
+  return [...map.values()].sort((a,b)=>new Date(b.last_seen)-new Date(a.last_seen))
+}
+export async function getReports(){
+  if(!supabaseConfigured) return {bills:[],orders:[],reviews:[]}
+  const [{data:bills,error:e1},{data:orders,error:e2},{data:reviews,error:e3}]=await Promise.all([
+    supabase.from('bills').select('*').eq('status','paid').order('paid_at',{ascending:false}),
+    supabase.from('food_orders').select('id,status,created_at,food_order_items(item_name_th,quantity)').order('created_at',{ascending:false}),
+    supabase.from('reviews').select('*').order('created_at',{ascending:false})
+  ])
+  noerr(e1);noerr(e2);noerr(e3);return {bills:bills||[],orders:orders||[],reviews:reviews||[]}
+}
