@@ -3,13 +3,14 @@ import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate, usePa
 import { QRCodeSVG } from 'qrcode.react'
 import {
   activateSession, askAi, closeBill, confirmReservation, createFoodOrder, createReservation,
-  createServiceCall, getAdminSession, getReservation, getSession, getSettings, listBills, listMenu,
+  createServiceCall, getAdminSession, getCurrentProfile, getReservation, getSession, getSettings, listBills, listMenu,
   listOrders, listReservations, listReviews, listServiceCalls, listSessionOrders, listTables, login,
   logout, markTableReady, rejectReservation, requestBill, resolveServiceCall, shopIsOpen, submitReview,
   subscribeAll, updateOrderStatus, updateSettings
 } from './lib/api'
 import { MENU, ORDER_FLOW, ORDER_LABEL, SHOP, TABLE_LABEL } from './lib/constants'
 import { supabaseConfigured } from './lib/supabase'
+import { AuditPage, BillingManager, CustomersPage, MenuManager, PromotionsPage, ReportsPage, StaffPage, TablesManager } from './admin/ProductionPages'
 
 const money=(n)=>new Intl.NumberFormat('th-TH',{style:'currency',currency:'THB',maximumFractionDigits:0}).format(Number(n||0))
 const dateTime=(v)=>v?new Intl.DateTimeFormat('th-TH',{dateStyle:'short',timeStyle:'short'}).format(new Date(v)):'-'
@@ -245,12 +246,39 @@ function AdminLogin({onLogin}) {
 }
 
 const adminNav=[
-  ['/admin/dashboard','▦','Dashboard'],['/admin/reservations','◷','Reservations'],['/admin/tables','▤','Tables'],
-  ['/admin/orders','🍲','Kitchen / Orders'],['/admin/service','🔔','Service Calls'],['/admin/billing','฿','Billing'],
-  ['/admin/menu','☷','Menu'],['/admin/reviews','★','Reviews'],['/admin/settings','⚙','Settings'],
+  ['/admin/dashboard','▦','Dashboard',['owner','manager','cashier','kitchen','staff']],
+  ['/admin/reservations','◷','Reservations',['owner','manager','cashier','staff']],
+  ['/admin/tables','▤','Tables',['owner','manager','cashier','staff']],
+  ['/admin/orders','🍲','Kitchen / Orders',['owner','manager','kitchen','staff']],
+  ['/admin/service','🔔','Service Calls',['owner','manager','staff','kitchen']],
+  ['/admin/billing','฿','Billing',['owner','manager','cashier']],
+  ['/admin/menu','☷','Menu',['owner','manager']],
+  ['/admin/customers','👥','Customers',['owner','manager','cashier']],
+  ['/admin/promotions','%','Promotions',['owner','manager']],
+  ['/admin/reviews','★','Reviews',['owner','manager']],
+  ['/admin/reports','▥','Reports',['owner','manager']],
+  ['/admin/staff','♟','Staff',['owner']],
+  ['/admin/audit','⌁','Audit Log',['owner']],
+  ['/admin/settings','⚙','Settings',['owner','manager']],
 ]
-function AdminShell({children,onLogout}) {
-  return <div className="admin-shell"><aside><div className="admin-brand"><Logo small/><div><b>ชาบูอร่อยจัง</b><span>ADMIN SYSTEM</span></div></div><nav>{adminNav.map(([to,i,l])=><NavLink key={to} to={to}><span>{i}</span>{l}</NavLink>)}</nav><button className="logout" onClick={onLogout}>ออกจากระบบ</button></aside><main>{children}</main></div>
+function AdminShell({children,onLogout,profile}) {
+  const [soundOn,setSoundOn]=useState(false)
+  const [noticeCount,setNoticeCount]=useState(0)
+  useEffect(()=>{
+    const off=subscribeAll((payload)=>{
+      setNoticeCount(n=>n+1)
+      if(soundOn){
+        try{
+          const A=window.AudioContext||window.webkitAudioContext
+          const ctx=new A();const osc=ctx.createOscillator();const gain=ctx.createGain()
+          osc.connect(gain);gain.connect(ctx.destination);osc.frequency.value=880;gain.gain.value=.05;osc.start();osc.stop(ctx.currentTime+.12)
+        }catch{}
+      }
+    })
+    return off
+  },[soundOn])
+  const role=profile?.role||'staff'
+  return <div className="admin-shell"><aside><div className="admin-brand"><Logo small/><div><b>ชาบูอร่อยจัง</b><span>{profile?.display_name||'STAFF'} • {role.toUpperCase()}</span></div></div><nav>{adminNav.filter(([, , ,roles])=>roles.includes(role)).map(([to,i,l])=><NavLink key={to} to={to}><span>{i}</span>{l}</NavLink>)}</nav><div className="admin-side-tools"><button className={soundOn?'sound-toggle on':'sound-toggle'} onClick={()=>setSoundOn(v=>!v)}>{soundOn?'🔊 เสียงแจ้งเตือน':'🔇 เปิดเสียงแจ้งเตือน'}</button>{noticeCount>0&&<button className="notice-reset" onClick={()=>setNoticeCount(0)}>🔔 {noticeCount} รายการใหม่</button>}</div><button className="logout" onClick={onLogout}>ออกจากระบบ</button></aside><main>{children}</main></div>
 }
 function AdminHead({eyebrow,title,desc,action}){return <div className="admin-head"><div><span className="eyebrow">{eyebrow}</span><h1>{title}</h1><p>{desc}</p></div>{action}</div>}
 
@@ -380,18 +408,26 @@ function SettingsAdmin({settings,onChange}){
   </div></section><section className="admin-card"><h2>ข้อมูลการขาย</h2><form className="settings-form" onSubmit={save}><label>เวลาเปิด<input type="time" value={String(form.open_time||'11:00').slice(0,5)} onChange={e=>setForm(f=>({...f,open_time:e.target.value}))}/></label><label>เวลาปิด<input type="time" value={String(form.close_time||'22:00').slice(0,5)} onChange={e=>setForm(f=>({...f,close_time:e.target.value}))}/></label><label>ราคาผู้ใหญ่<input type="number" value={form.buffet_price||299} onChange={e=>setForm(f=>({...f,buffet_price:e.target.value}))}/></label><label>PromptPay<input value={form.promptpay||''} onChange={e=>setForm(f=>({...f,promptpay:e.target.value}))}/></label><button className="btn primary">บันทึกการตั้งค่า</button></form></section></div></>
 }
 
-function Protected({session,children}){return session?children:<Navigate to="/admin/login" replace/>}
+function Protected({session,profile,roles,children}){
+  if(!session) return <Navigate to="/admin/login" replace/>
+  if(!profile) return <div className="loader">กำลังตรวจสอบสิทธิ์...</div>
+  if(profile.is_active===false) return <div className="login-page"><div className="login-card"><h2>บัญชีถูกปิดใช้งาน</h2><p>กรุณาติดต่อ Owner</p></div></div>
+  if(roles&&!roles.includes(profile.role)) return <Navigate to="/admin/dashboard" replace/>
+  return children
+}
 
 export default function App(){
   const [lang,setLang]=useState(localStorage.getItem('shabu-lang')||'th')
   const [settings,setSettings]=useState(null)
   const [adminSession,setAdminSession]=useState(null)
+  const [adminProfile,setAdminProfile]=useState(null)
   const [authReady,setAuthReady]=useState(false)
   useEffect(()=>{localStorage.setItem('shabu-lang',lang)},[lang])
-  useEffect(()=>{getSettings().then(setSettings).catch(()=>setSettings({open_time:'11:00',close_time:'22:00'}));getAdminSession().then(s=>{setAdminSession(s);setAuthReady(true)})},[])
+  useEffect(()=>{getSettings().then(setSettings).catch(()=>setSettings({open_time:'11:00',close_time:'22:00'}));getAdminSession().then(async s=>{setAdminSession(s);if(s)setAdminProfile(await getCurrentProfile());setAuthReady(true)})},[])
   if(!settings||!authReady)return <div className="loader">กำลังเปิดร้านชาบูอร่อยจัง...</div>
-  async function doLogout(){await logout();setAdminSession(null)}
-  const admin=(page)=><Protected session={adminSession}><AdminShell onLogout={doLogout}>{page}</AdminShell></Protected>
+  async function doLogout(){await logout();setAdminSession(null);setAdminProfile(null)}
+  async function onAdminLogin(s){setAdminSession(s);setAdminProfile(await getCurrentProfile())}
+  const admin=(page,roles)=><Protected session={adminSession} profile={adminProfile} roles={roles}><AdminShell onLogout={doLogout} profile={adminProfile}>{page}</AdminShell></Protected>
   return <Routes>
     <Route path="/" element={<CustomerShell lang={lang} setLang={setLang} settings={settings}><Home lang={lang} settings={settings}/></CustomerShell>}/>
     <Route path="/menu" element={<CustomerShell lang={lang} setLang={setLang} settings={settings}><MenuPage lang={lang}/></CustomerShell>}/>
@@ -399,16 +435,21 @@ export default function App(){
     <Route path="/reservation" element={<CustomerShell lang={lang} setLang={setLang} settings={settings}><ReservationPage/></CustomerShell>}/>
     <Route path="/chat" element={<CustomerShell lang={lang} setLang={setLang} settings={settings}><ChatPage/></CustomerShell>}/>
     <Route path="/table/:token" element={<TablePage/>}/>
-    <Route path="/admin/login" element={adminSession?<Navigate to="/admin/dashboard" replace/>:<AdminLogin onLogin={setAdminSession}/>}/>
-    <Route path="/admin/dashboard" element={admin(<Dashboard/>)}/>
-    <Route path="/admin/reservations" element={admin(<ReservationsAdmin/>)}/>
-    <Route path="/admin/tables" element={admin(<TablesAdmin/>)}/>
-    <Route path="/admin/orders" element={admin(<OrdersAdmin/>)}/>
-    <Route path="/admin/service" element={admin(<ServiceAdmin/>)}/>
-    <Route path="/admin/billing" element={admin(<BillingAdmin/>)}/>
-    <Route path="/admin/menu" element={admin(<MenuAdmin/>)}/>
-    <Route path="/admin/reviews" element={admin(<ReviewsAdmin/>)}/>
-    <Route path="/admin/settings" element={admin(<SettingsAdmin settings={settings} onChange={setSettings}/>)}/>
+    <Route path="/admin/login" element={adminSession?<Navigate to="/admin/dashboard" replace/>:<AdminLogin onLogin={onAdminLogin}/>}/>
+    <Route path="/admin/dashboard" element={admin(<Dashboard/>,['owner','manager','cashier','kitchen','staff'])}/>
+    <Route path="/admin/reservations" element={admin(<ReservationsAdmin/>,['owner','manager','cashier','staff'])}/>
+    <Route path="/admin/tables" element={admin(<TablesManager/>,['owner','manager','cashier','staff'])}/>
+    <Route path="/admin/orders" element={admin(<OrdersAdmin/>,['owner','manager','kitchen','staff'])}/>
+    <Route path="/admin/service" element={admin(<ServiceAdmin/>,['owner','manager','staff','kitchen'])}/>
+    <Route path="/admin/billing" element={admin(<BillingManager/>,['owner','manager','cashier'])}/>
+    <Route path="/admin/menu" element={admin(<MenuManager/>,['owner','manager'])}/>
+    <Route path="/admin/reviews" element={admin(<ReviewsAdmin/>,['owner','manager'])}/>
+    <Route path="/admin/customers" element={admin(<CustomersPage/>,['owner','manager','cashier'])}/>
+    <Route path="/admin/promotions" element={admin(<PromotionsPage/>,['owner','manager'])}/>
+    <Route path="/admin/reports" element={admin(<ReportsPage/>,['owner','manager'])}/>
+    <Route path="/admin/staff" element={admin(<StaffPage/>,['owner'])}/>
+    <Route path="/admin/audit" element={admin(<AuditPage/>,['owner'])}/>
+    <Route path="/admin/settings" element={admin(<SettingsAdmin settings={settings} onChange={setSettings}/>,['owner','manager'])}/>
     <Route path="*" element={<Navigate to="/" replace/>}/>
   </Routes>
 }
