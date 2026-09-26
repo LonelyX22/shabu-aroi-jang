@@ -6,18 +6,22 @@ import {
   createServiceCall, getAdminSession, getCurrentProfile, getReservation, getSession, getSettings, listBills, listMenu,
   listOrders, listReservations, listReviews, listServiceCalls, listSessionOrders, listTables, login,
   logout, markTableReady, rejectReservation, requestBill, resolveServiceCall, shopIsOpen, submitReview,
-  subscribeAll, updateOrderStatus, updateSettings, expireReservations, updateReservationAdmin, cancelReservationAdmin
+  subscribeAll, updateOrderStatus, updateSettings, expireReservations, updateReservationAdmin, cancelReservationAdmin,
+  getReports, listNotifications, markNotificationRead, markAllNotificationsRead, subscribeNotifications,
+  uploadPaymentSlip, uploadBrandLogo
 } from './lib/api'
 import { MENU, ORDER_FLOW, ORDER_LABEL, SHOP, TABLE_LABEL } from './lib/constants'
 import { supabaseConfigured } from './lib/supabase'
-import { AuditPage, BillingManager, CustomersPage, MenuManager, PromotionsPage, ReportsPage, StaffPage, TablesManager } from './admin/ProductionPages'
+import { AuditPage, BillingManager, ChatHistoryPage, CustomersPage, KnowledgeBasePage, MenuManager, PromotionsPage, ReportsPage, ReviewsAdvancedPage, StaffPage, TablesManager } from './admin/ProductionPages'
+import { promptPayPayload } from './lib/promptpay'
 
 const money=(n)=>new Intl.NumberFormat('th-TH',{style:'currency',currency:'THB',maximumFractionDigits:0}).format(Number(n||0))
 const dateTime=(v)=>v?new Intl.DateTimeFormat('th-TH',{dateStyle:'short',timeStyle:'short'}).format(new Date(v)):'-'
 const t=(lang,th,en)=>lang==='th'?th:en
 
 function Logo({small=false}) {
-  return <img className={small?'logo small':'logo'} src="/shabu-aroi-jang/logo.svg" alt={SHOP.nameTh} />
+  const src=localStorage.getItem('shabu-logo-url')||'/shabu-aroi-jang/logo.svg'
+  return <img className={small?'logo small':'logo'} src={src} alt={SHOP.nameTh} />
 }
 
 function Status({value,type='order'}) {
@@ -188,12 +192,12 @@ function ChatPage() {
 
 function TablePage() {
   const {token}=useParams()
-  const [session,setSession]=useState(null); const [menu,setMenu]=useState([]); const [orders,setOrders]=useState([])
+  const [session,setSession]=useState(null); const [menu,setMenu]=useState([]); const [orders,setOrders]=useState([]); const [tableSettings,setTableSettings]=useState(null); const [slipBusy,setSlipBusy]=useState(false)
   const [cart,setCart]=useState({}); const [cat,setCat]=useState('ทั้งหมด'); const [notice,setNotice]=useState(''); const [loading,setLoading]=useState(true)
   async function load(){
     try{
-      const [s,m,o]=await Promise.all([getSession(token),listMenu(),listSessionOrders(token)])
-      setSession(s);setMenu(m);setOrders(o)
+      const [s,m,o,st]=await Promise.all([getSession(token),listMenu(),listSessionOrders(token),getSettings()])
+      setSession(s);setMenu(m);setOrders(o);setTableSettings(st)
     }finally{setLoading(false)}
   }
   useEffect(()=>{load();const u=subscribeAll(load);const id=setInterval(load,5000);return()=>{u();clearInterval(id)}},[token])
@@ -215,6 +219,13 @@ function TablePage() {
   if(!session)return <section className="section page"><div className="wrap narrow"><div className="empty"><h2>QR นี้ไม่พร้อมใช้งาน</h2><p>กรุณาติดต่อพนักงาน</p></div></div></section>
   if(session.status==='reserved')return <section className="section page"><div className="wrap narrow"><div className="table-welcome"><span>TABLE</span><h1>{session.table_code||session.table?.code}</h1><p>{session.guest_count} คน • Buffet 299 บาท • {SHOP.diningMinutes} นาที</p><button className="btn primary wide" onClick={enter}>เริ่มใช้โต๊ะและสั่งอาหาร</button></div></div></section>
   if(session.status==='closed')return <ReviewForm token={token} table={session.table_code||session.table?.code}/>
+  if(session.status==='billing'){
+    const b=session.bill||{}
+    let pp=''
+    try{pp=promptPayPayload(tableSettings?.promptpay||SHOP.promptpay,b.total||0)}catch{}
+    const uploadSlip=async(e)=>{const file=e.target.files?.[0];if(!file)return;setSlipBusy(true);try{await uploadPaymentSlip(token,file);setNotice('ส่งสลิปแล้ว กรุณารอพนักงานตรวจ');await load()}catch(err){alert(err.message)}finally{setSlipBusy(false)}}
+    return <section className="section page"><div className="wrap narrow"><div className="payment-customer"><span className="eyebrow">CHECKOUT • TABLE {session.table_code}</span><h1>รอชำระเงิน</h1><div className="payment-total">{money(b.total)}</div><div className="bill-customer-lines"><span>ผู้ใหญ่ {b.adult_count||0}</span><span>เด็ก {b.child_count||0}</span><span>เด็กฟรี {b.free_child_count||0}</span><span>เมนูเพิ่ม {money(b.extra_total||0)}</span><span>ส่วนลด -{money(b.discount_amount||0)}</span></div>{pp&&<div className="admin-qr-box"><QRCodeSVG value={pp} size={260}/></div>}<p>PromptPay: <b>{tableSettings?.promptpay||SHOP.promptpay}</b></p><label className="upload-slip">📎 อัปโหลดสลิป<input type="file" accept="image/*" disabled={slipBusy} onChange={uploadSlip}/></label>{b.slip_status&&b.slip_status!=='none'&&<div className={`slip-status ${b.slip_status}`}>สถานะสลิป: {({pending:'รอตรวจ',approved:'ผ่านแล้ว',rejected:'ไม่ผ่าน'})[b.slip_status]||b.slip_status}</div>}{tableSettings?.card_payment_url&&<a className="btn dark wide" href={tableSettings.card_payment_url} target="_blank" rel="noreferrer">💳 ชำระด้วยบัตรออนไลน์</a>}<p className="muted">หลังชำระแล้ว กรุณารอพนักงานปิดบิล ระบบจะพาไปหน้ารีวิวอัตโนมัติ</p></div></div></section>
+  }
   return <section className="table-app">
     {notice&&<div className="toast">{notice}</div>}
     <div className="table-app-head"><div><Logo small/><div><small>TABLE SESSION</small><h2>โต๊ะ {session.table_code||session.table?.code}</h2></div></div><span>{session.guest_count} คน</span></div>
@@ -258,55 +269,58 @@ const adminNav=[
   ['/admin/promotions','%','Promotions',['owner','manager']],
   ['/admin/reviews','★','Reviews',['owner','manager']],
   ['/admin/reports','▥','Reports',['owner','manager']],
+  ['/admin/ai-history','💬','AI History',['owner','manager']],
+  ['/admin/knowledge','🧠','AI Knowledge',['owner','manager']],
   ['/admin/staff','♟','Staff',['owner']],
   ['/admin/audit','⌁','Audit Log',['owner']],
   ['/admin/settings','⚙','Settings',['owner','manager']],
 ]
 function AdminShell({children,onLogout,profile}) {
-  const [soundOn,setSoundOn]=useState(false)
-  const [noticeCount,setNoticeCount]=useState(0)
-  useEffect(()=>{
-    const off=subscribeAll((payload)=>{
-      setNoticeCount(n=>n+1)
-      if(soundOn){
-        try{
-          const A=window.AudioContext||window.webkitAudioContext
-          const ctx=new A();const osc=ctx.createOscillator();const gain=ctx.createGain()
-          osc.connect(gain);gain.connect(ctx.destination);osc.frequency.value=880;gain.gain.value=.05;osc.start();osc.stop(ctx.currentTime+.12)
-        }catch{}
-      }
-    })
-    return off
-  },[soundOn])
+  const [soundOn,setSoundOn]=useState(localStorage.getItem('shabu-sound')==='1')
+  const [notices,setNotices]=useState([]),[openNotice,setOpenNotice]=useState(false)
   const role=profile?.role||'staff'
-  return <div className="admin-shell"><aside><div className="admin-brand"><Logo small/><div><b>ชาบูอร่อยจัง</b><span>{profile?.display_name||'STAFF'} • {role.toUpperCase()}</span></div></div><nav>{adminNav.filter(([, , ,roles])=>roles.includes(role)).map(([to,i,l])=><NavLink key={to} to={to}><span>{i}</span>{l}</NavLink>)}</nav><div className="admin-side-tools"><button className={soundOn?'sound-toggle on':'sound-toggle'} onClick={()=>setSoundOn(v=>!v)}>{soundOn?'🔊 เสียงแจ้งเตือน':'🔇 เปิดเสียงแจ้งเตือน'}</button>{noticeCount>0&&<button className="notice-reset" onClick={()=>setNoticeCount(0)}>🔔 {noticeCount} รายการใหม่</button>}</div><button className="logout" onClick={onLogout}>ออกจากระบบ</button></aside><main>{children}</main></div>
+  async function loadNotices(){try{setNotices(await listNotifications())}catch{}}
+  function beep(type){
+    if(!soundOn)return
+    const freq={reservations:660,food_orders:880,service_calls:1040,bills:520,review:440}[type]||760
+    try{const A=window.AudioContext||window.webkitAudioContext;const ctx=new A();const osc=ctx.createOscillator();const gain=ctx.createGain();osc.connect(gain);gain.connect(ctx.destination);osc.frequency.value=freq;gain.gain.value=.05;osc.start();osc.stop(ctx.currentTime+.16)}catch{}
+  }
+  useEffect(()=>{loadNotices();const off=subscribeNotifications(p=>{beep(p?.new?.event_type);loadNotices()});return off},[soundOn])
+  useEffect(()=>{localStorage.setItem('shabu-sound',soundOn?'1':'0')},[soundOn])
+  const unread=notices.filter(n=>!n.is_read)
+  async function readOne(n){await markNotificationRead(n.id);await loadNotices()}
+  async function readAll(){await markAllNotificationsRead(unread.map(n=>n.id));await loadNotices()}
+  return <div className="admin-shell"><aside><div className="admin-brand"><Logo small/><div><b>ชาบูอร่อยจัง</b><span>{profile?.display_name||'STAFF'} • {role.toUpperCase()}</span></div></div><nav>{adminNav.filter(([, , ,roles])=>roles.includes(role)).map(([to,i,l])=><NavLink key={to} to={to}><span>{i}</span>{l}</NavLink>)}</nav><div className="admin-side-tools"><button className={soundOn?'sound-toggle on':'sound-toggle'} onClick={()=>setSoundOn(v=>!v)}>{soundOn?'🔊 เสียงแจ้งเตือน':'🔇 เปิดเสียงแจ้งเตือน'}</button><button className="notice-reset" onClick={()=>setOpenNotice(v=>!v)}>🔔 {unread.length} ยังไม่อ่าน</button></div><button className="logout" onClick={onLogout}>ออกจากระบบ</button></aside><main>{openNotice&&<div className="notification-panel"><div className="card-head"><h3>การแจ้งเตือน</h3><button className="mini-btn" onClick={readAll}>อ่านทั้งหมด</button></div><div className="notification-list">{notices.slice(0,30).map(n=><button key={n.id} className={n.is_read?'read':''} onClick={()=>readOne(n)}><b>{n.title}</b><span>{n.message}</span><small>{dateTime(n.created_at)}</small></button>)}{!notices.length&&<p className="muted">ยังไม่มีการแจ้งเตือน</p>}</div></div>}{children}</main></div>
 }
 function AdminHead({eyebrow,title,desc,action}){return <div className="admin-head"><div><span className="eyebrow">{eyebrow}</span><h1>{title}</h1><p>{desc}</p></div>{action}</div>}
 
 function Dashboard(){
-  const [tables,setTables]=useState([]),[orders,setOrders]=useState([]),[res,setRes]=useState([]),[calls,setCalls]=useState([]),[bills,setBills]=useState([]),[reviews,setReviews]=useState([])
+  const [tables,setTables]=useState([]),[orders,setOrders]=useState([]),[res,setRes]=useState([]),[calls,setCalls]=useState([]),[bills,setBills]=useState([]),[reviews,setReviews]=useState([]),[report,setReport]=useState({bills:[],orders:[],sessions:[]})
   async function load(){
-    const result=await Promise.allSettled([listTables(),listOrders(),listReservations(),listServiceCalls(),listBills(),listReviews()])
+    const result=await Promise.allSettled([listTables(),listOrders(),listReservations(),listServiceCalls(),listBills(),listReviews(),getReports()])
     const val=(i)=>result[i].status==='fulfilled'?result[i].value:[]
-    setTables(val(0));setOrders(val(1));setRes(val(2));setCalls(val(3));setBills(val(4));setReviews(val(5))
+    setTables(val(0));setOrders(val(1));setRes(val(2));setCalls(val(3));setBills(val(4));setReviews(val(5));setReport(result[6].status==='fulfilled'?result[6].value:{bills:[],orders:[],sessions:[]})
   }
   useEffect(()=>{load();return subscribeAll(load)},[])
   const avg=reviews.length?(reviews.reduce((s,x)=>s+Number(x.overall||0),0)/reviews.length).toFixed(1):'-'
+  const today=new Date();const sameDay=(v)=>{const d=new Date(v);return d.getFullYear()===today.getFullYear()&&d.getMonth()===today.getMonth()&&d.getDate()===today.getDate()}
+  const todayBills=(report.bills||[]).filter(x=>sameDay(x.paid_at)),todaySales=todayBills.reduce((s,x)=>s+Number(x.total||0),0),todayCustomers=todayBills.reduce((s,x)=>s+Number(x.guest_count||0),0)
+  const topMap={};(report.orders||[]).filter(x=>sameDay(x.created_at)).forEach(o=>(o.food_order_items||[]).forEach(i=>{topMap[i.item_name_th]=(topMap[i.item_name_th]||0)+Number(i.quantity||0)}))
+  const topMenu=Object.entries(topMap).sort((a,b)=>b[1]-a[1]).slice(0,5)
+  const turn={};(report.sessions||[]).forEach(s=>{const code=s.restaurant_tables?.code;if(code)turn[code]=(turn[code]||0)+1})
+  const topTable=Object.entries(turn).sort((a,b)=>b[1]-a[1]).slice(0,5)
+  const hour={};(report.orders||[]).filter(x=>sameDay(x.created_at)).forEach(o=>{const h=new Date(o.created_at).getHours();hour[h]=(hour[h]||0)+1})
+  const maxH=Math.max(1,...Object.values(hour))
   const cards=[
-    ['🟢','โต๊ะว่าง',tables.filter(x=>x.status==='available').length],
-    ['🍲','โต๊ะใช้งาน',tables.filter(x=>x.status==='occupied').length],
-    ['◷','จองรอยืนยัน',res.filter(x=>x.status==='pending').length],
-    ['🔥','ออเดอร์รอครัว',orders.filter(x=>x.status==='pending').length],
-    ['🔔','เรียกพนักงาน',calls.filter(x=>x.status==='pending').length],
-    ['💳','รอเช็คบิล',bills.filter(x=>x.status==='pending').length],
-    ['★','รีวิวเฉลี่ย',avg],
+    ['฿','ยอดขายวันนี้',money(todaySales)],['👥','ลูกค้าวันนี้',todayCustomers],
+    ['🟢','โต๊ะว่าง',tables.filter(x=>x.status==='available').length],['🍲','โต๊ะใช้งาน',tables.filter(x=>x.status==='occupied').length],
+    ['◷','จองรอยืนยัน',res.filter(x=>x.status==='pending').length],['🔥','ออเดอร์รอครัว',orders.filter(x=>x.status==='pending').length],
+    ['🔔','เรียกพนักงาน',calls.filter(x=>x.status==='pending').length],['💳','รอเช็คบิล',bills.filter(x=>x.status==='pending').length],['★','รีวิวเฉลี่ย',avg],
   ]
-  return <><AdminHead eyebrow="OVERVIEW" title="Dashboard" desc="ภาพรวมร้านแบบ Realtime"/><div className="stat-grid">{cards.map(([i,l,v])=><div className="stat-card" key={l}><span>{i}</span><div><small>{l}</small><b>{v}</b></div></div>)}</div>
-    <div className="admin-grid two"><section className="admin-card"><div className="card-head"><h2>โต๊ะในร้าน</h2><Link to="/admin/tables">จัดการ →</Link></div><div className="mini-table-grid">{tables.map(x=><div key={x.id} className={`mini-table ${x.status}`}><b>{x.code}</b><small>{x.seats} ที่ • {TABLE_LABEL[x.status]}</small></div>)}</div></section>
-    <section className="admin-card"><div className="card-head"><h2>Order ล่าสุด</h2><Link to="/admin/orders">ดูครัว →</Link></div><div className="admin-list">{orders.slice(0,8).map(o=><div key={o.id}><span><b>โต๊ะ {o.table_code||'-'}</b><small>{o.order_number} • {dateTime(o.created_at)}</small></span><Status value={o.status}/></div>)}{!orders.length&&<p className="muted">ยังไม่มี Order</p>}</div></section></div>
+  return <><AdminHead eyebrow="OVERVIEW" title="Dashboard" desc="ภาพรวมร้าน ยอดขาย และการปฏิบัติงานแบบ Realtime"/><div className="stat-grid dashboard-stats">{cards.map(([i,l,v])=><div className="stat-card" key={l}><span>{i}</span><div><small>{l}</small><b>{v}</b></div></div>)}</div>
+    <div className="admin-grid two"><section className="admin-card"><div className="card-head"><h2>Order ต่อชั่วโมงวันนี้</h2><Link to="/admin/reports">รายงาน →</Link></div><div className="bar-chart">{Object.entries(hour).sort((a,b)=>a[0]-b[0]).map(([h,n])=><div key={h}><span>{String(h).padStart(2,'0')}:00</span><i style={{width:`${Math.max(4,n/maxH*100)}%`}}></i><b>{n}</b></div>)}</div>{!Object.keys(hour).length&&<p className="muted">ยังไม่มี Order วันนี้</p>}</section><section className="admin-card"><div className="card-head"><h2>เมนูยอดนิยมวันนี้</h2><Link to="/admin/orders">ดูครัว →</Link></div><div className="rank-list">{topMenu.map(([n,q],i)=><div key={n}><b>#{i+1}</b><span>{n}</span><strong>{q}</strong></div>)}</div></section><section className="admin-card"><h2>โต๊ะหมุนเวียนสูง</h2><div className="rank-list">{topTable.map(([n,q],i)=><div key={n}><b>#{i+1}</b><span>โต๊ะ {n}</span><strong>{q} รอบ</strong></div>)}</div></section><section className="admin-card"><div className="card-head"><h2>โต๊ะในร้าน</h2><Link to="/admin/tables">จัดการ →</Link></div><div className="mini-table-grid">{tables.map(x=><div key={x.id} className={`mini-table ${x.status}`}><b>{x.code}</b><small>{x.seats} ที่ • {TABLE_LABEL[x.status]||x.status}</small></div>)}</div></section></div>
   </>
 }
-
 function ReservationsAdmin(){
   const [items,setItems]=useState([]),[tables,setTables]=useState([]),[selected,setSelected]=useState({}),[qrItem,setQrItem]=useState(null),[editItem,setEditItem]=useState(null)
   async function load(){const [r,tb]=await Promise.all([listReservations(),listTables()]);setItems(r);setTables(tb)}
@@ -384,14 +398,17 @@ function TablesAdmin(){
 }
 
 function OrdersAdmin(){
-  const [items,setItems]=useState([]); const [filter,setFilter]=useState('active')
+  const [items,setItems]=useState([]),[filter,setFilter]=useState('active'),[station,setStation]=useState('all'),[tick,setTick]=useState(0)
   async function load(){setItems(await listOrders())}
-  useEffect(()=>{load();return subscribeAll(load)},[])
-  const list=items.filter(x=>filter==='all'?true:filter==='active'?x.status!=='served'&&x.status!=='cancelled':x.status===filter)
-  async function move(o,status){await updateOrderStatus(o.id,status);load()}
-  return <><AdminHead eyebrow="KITCHEN DISPLAY" title="Kitchen / Orders" desc="รับออเดอร์ เตรียม และส่งต่อพนักงานเสิร์ฟ"/><div className="filter-row">{[['active','กำลังทำ'],['pending','รอรับ'],['preparing','กำลังเตรียม'],['ready','พร้อมเสิร์ฟ'],['served','เสิร์ฟแล้ว'],['all','ทั้งหมด']].map(([v,l])=><button className={filter===v?'active':''} key={v} onClick={()=>setFilter(v)}>{l}</button>)}</div><div className="kitchen-grid">{list.map(o=><article className={`kitchen-card ${o.status}`} key={o.id}><div className="kitchen-head"><div><span>โต๊ะ</span><h2>{o.table_code||'-'}</h2></div><Status value={o.status}/></div><small>{o.order_number} • {dateTime(o.created_at)}</small><ul>{(o.items||[]).map((i,k)=><li key={i.id||k}><b>{i.name_th||i.item_name_th||'เมนู'}</b><strong>× {i.quantity}</strong></li>)}</ul><div className="kitchen-actions">{ORDER_FLOW.map(s=><button key={s} disabled={o.status===s} className={o.status===s?'current':''} onClick={()=>move(o,s)}>{ORDER_LABEL[s]}</button>)}</div></article>)}{!list.length&&<div className="empty admin-empty"><h2>ไม่มี Order ในสถานะนี้</h2></div>}</div></>
+  useEffect(()=>{load();const off=subscribeAll(load);const id=setInterval(()=>setTick(x=>x+1),30000);return()=>{off();clearInterval(id)}},[])
+  const stations=[['all','ทุก Station'],['kitchen','ครัวหลัก'],['hot','ครัวร้อน'],['fried','ของทอด'],['bar','บาร์น้ำ'],['dessert','ของหวาน']]
+  const list=items.filter(x=>(filter==='all'?true:filter==='active'?!['served','cancelled'].includes(x.status):x.status===filter)&&
+    (station==='all'||(x.items||[]).some(i=>(i.station||'kitchen')===station)))
+  async function move(o,status){try{await updateOrderStatus(o.id,status);load()}catch(e){alert(e.message)}}
+  function age(o){return Math.max(0,Math.floor((Date.now()-new Date(o.created_at).getTime())/60000))}
+  function full(){const el=document.querySelector('.kitchen-view');if(el?.requestFullscreen)el.requestFullscreen()}
+  return <div className="kitchen-view"><AdminHead eyebrow="KITCHEN DISPLAY" title="Kitchen / Orders" desc="แยก Station, เตือน Order ช้า, Serving และ Full screen" action={<button className="btn dark" onClick={full}>⛶ Full screen</button>}/><div className="filter-row">{[['active','กำลังทำ'],['pending','รอรับ'],['preparing','กำลังเตรียม'],['ready','พร้อมเสิร์ฟ'],['serving','กำลังเสิร์ฟ'],['served','เสิร์ฟแล้ว'],['all','ทั้งหมด']].map(([v,l])=><button className={filter===v?'active':''} key={v} onClick={()=>setFilter(v)}>{l}</button>)}</div><div className="filter-row station-filter">{stations.map(([v,l])=><button className={station===v?'active':''} key={v} onClick={()=>setStation(v)}>{l}</button>)}</div><div className="kitchen-grid">{list.map(o=>{const mins=age(o),slow=mins>=15&&!['served','cancelled'].includes(o.status);return <article className={`kitchen-card ${o.status} ${slow?'slow-order':''}`} key={o.id}><div className="kitchen-head"><div><span>โต๊ะ</span><h2>{o.table_code||'-'}</h2></div><Status value={o.status}/></div><div className="order-clock"><b>{mins} นาที</b>{slow&&<span>⚠ ช้า</span>}</div><small>{o.order_number} • {dateTime(o.created_at)}</small><ul>{(o.items||[]).filter(i=>station==='all'||(i.station||'kitchen')===station).map((i,k)=><li key={i.id||k}><span><b>{i.name_th||i.item_name_th||'เมนู'}</b><small>{({kitchen:'ครัวหลัก',hot:'ครัวร้อน',fried:'ของทอด',bar:'บาร์น้ำ',dessert:'ของหวาน'})[i.station]||i.station||'ครัวหลัก'}</small></span><strong>× {i.quantity}</strong></li>)}</ul><div className="kitchen-actions">{ORDER_FLOW.map(s=><button key={s} disabled={o.status===s} className={o.status===s?'current':''} onClick={()=>move(o,s)}>{ORDER_LABEL[s]}</button>)}</div>{o.served_at&&<small>เสิร์ฟ {dateTime(o.served_at)}</small>}</article>})}{!list.length&&<div className="empty admin-empty"><h2>ไม่มี Order ในสถานะนี้</h2></div>}</div></div>
 }
-
 function ServiceAdmin(){
   const [items,setItems]=useState([])
   async function load(){setItems(await listServiceCalls())}
@@ -431,10 +448,12 @@ function SettingsAdmin({settings,onChange}){
       free_child_height_cm:Number(form.free_child_height_cm||90),child_max_height_cm:Number(form.child_max_height_cm||120),
       promptpay:form.promptpay||SHOP.promptpay,bank_name:form.bank_name||null,bank_account_name:form.bank_account_name||null,bank_account_number:form.bank_account_number||null,
       facebook:form.facebook||null,line_id:form.line_id||null,instagram:form.instagram||null,google_maps_url:form.google_maps_url||null,
-      phone:form.phone||SHOP.phone,address_th:form.address_th||SHOP.addressTh
+      phone:form.phone||SHOP.phone,address_th:form.address_th||SHOP.addressTh,shop_name_th:form.shop_name_th||SHOP.nameTh,shop_name_en:form.shop_name_en||SHOP.nameEn,
+      booking_slot_minutes:Number(form.booking_slot_minutes||30),max_bookings_per_slot:Number(form.max_bookings_per_slot||15),tax_id:form.tax_id||null,tax_branch:form.tax_branch||'สำนักงานใหญ่',tax_registered:!!form.tax_registered,logo_url:form.logo_url||null,card_payment_url:form.card_payment_url||null
     })
-    setForm(next);onChange(next);alert('บันทึกแล้ว')
+    if(next.logo_url)localStorage.setItem('shabu-logo-url',next.logo_url);setForm(next);onChange(next);alert('บันทึกแล้ว')
   }
+  async function uploadLogo(e){const file=e.target.files?.[0];if(!file)return;try{const url=await uploadBrandLogo(file);setForm(x=>({...x,logo_url:url}))}catch(err){alert(err.message)}}
   const modeValue=form.force_open?'open':form.force_closed?'closed':'auto'
   return <><AdminHead eyebrow="SETTINGS" title="ตั้งค่าร้าน" desc="ตั้งสถานะร้าน ราคา เวลา ข้อมูลติดต่อ เด็ก และ Payment"/>
     <div className="admin-grid two">
@@ -444,6 +463,8 @@ function SettingsAdmin({settings,onChange}){
         <button className={modeValue==='closed'?'active closed':''} onClick={()=>mode('closed')}><span>🔴</span><b>ปิดร้าน</b><small>หยุดรับลูกค้าชั่วคราว</small></button>
       </div></section>
       <section className="admin-card"><h2>กติกาการขาย</h2><form className="settings-form" onSubmit={save}>
+        <label>ชื่อร้าน<input value={form.shop_name_th||''} onChange={e=>setForm(f=>({...f,shop_name_th:e.target.value}))}/></label>
+        <label>ชื่อร้าน EN<input value={form.shop_name_en||''} onChange={e=>setForm(f=>({...f,shop_name_en:e.target.value}))}/></label>
         <label>เวลาเปิด<input type="time" value={String(form.open_time||'11:00').slice(0,5)} onChange={e=>setForm(f=>({...f,open_time:e.target.value}))}/></label>
         <label>เวลาปิด<input type="time" value={String(form.close_time||'22:00').slice(0,5)} onChange={e=>setForm(f=>({...f,close_time:e.target.value}))}/></label>
         <label>ราคาผู้ใหญ่<input type="number" value={form.buffet_price??299} onChange={e=>setForm(f=>({...f,buffet_price:e.target.value}))}/></label>
@@ -460,6 +481,13 @@ function SettingsAdmin({settings,onChange}){
         <label>Facebook<input value={form.facebook||''} onChange={e=>setForm(f=>({...f,facebook:e.target.value}))}/></label>
         <label>LINE<input value={form.line_id||''} onChange={e=>setForm(f=>({...f,line_id:e.target.value}))}/></label>
         <label>Instagram<input value={form.instagram||''} onChange={e=>setForm(f=>({...f,instagram:e.target.value}))}/></label>
+        <label>ช่วงจอง (นาที)<input type="number" value={form.booking_slot_minutes??30} onChange={e=>setForm(f=>({...f,booking_slot_minutes:e.target.value}))}/></label>
+        <label>Booking สูงสุด/ช่วง<input type="number" value={form.max_bookings_per_slot??15} onChange={e=>setForm(f=>({...f,max_bookings_per_slot:e.target.value}))}/></label>
+        <label>Tax ID<input value={form.tax_id||''} onChange={e=>setForm(f=>({...f,tax_id:e.target.value}))}/></label>
+        <label>สาขา<input value={form.tax_branch||''} onChange={e=>setForm(f=>({...f,tax_branch:e.target.value}))}/></label>
+        <label className="check"><input type="checkbox" checked={!!form.tax_registered} onChange={e=>setForm(f=>({...f,tax_registered:e.target.checked}))}/> จด VAT / ใช้ข้อมูลใบกำกับภาษี</label>
+        <label>Card Payment URL<input value={form.card_payment_url||''} onChange={e=>setForm(f=>({...f,card_payment_url:e.target.value}))}/></label>
+        <label className="span-2">Logo<input type="file" accept="image/*" onChange={uploadLogo}/>{form.logo_url&&<img className="image-preview brand-preview" src={form.logo_url} alt="logo"/>}</label>
         <label className="span-2">Google Maps URL<input value={form.google_maps_url||''} onChange={e=>setForm(f=>({...f,google_maps_url:e.target.value}))}/></label>
         <label className="span-2">ที่อยู่<textarea value={form.address_th||''} onChange={e=>setForm(f=>({...f,address_th:e.target.value}))}/></label>
         <button className="btn primary span-2">บันทึกการตั้งค่า</button>
@@ -483,7 +511,7 @@ export default function App(){
   const [adminProfile,setAdminProfile]=useState(null)
   const [authReady,setAuthReady]=useState(false)
   useEffect(()=>{localStorage.setItem('shabu-lang',lang)},[lang])
-  useEffect(()=>{getSettings().then(setSettings).catch(()=>setSettings({open_time:'11:00',close_time:'22:00'}));getAdminSession().then(async s=>{setAdminSession(s);if(s)setAdminProfile(await getCurrentProfile());setAuthReady(true)})},[])
+  useEffect(()=>{getSettings().then(s=>{setSettings(s);if(s?.logo_url)localStorage.setItem('shabu-logo-url',s.logo_url)}).catch(()=>setSettings({open_time:'11:00',close_time:'22:00'}));getAdminSession().then(async s=>{setAdminSession(s);if(s)setAdminProfile(await getCurrentProfile());setAuthReady(true)})},[])
   if(!settings||!authReady)return <div className="loader">กำลังเปิดร้านชาบูอร่อยจัง...</div>
   async function doLogout(){await logout();setAdminSession(null);setAdminProfile(null)}
   async function onAdminLogin(s){setAdminSession(s);setAdminProfile(await getCurrentProfile())}
@@ -503,10 +531,12 @@ export default function App(){
     <Route path="/admin/service" element={admin(<ServiceAdmin/>,['owner','manager','staff','kitchen'])}/>
     <Route path="/admin/billing" element={admin(<BillingManager/>,['owner','manager','cashier'])}/>
     <Route path="/admin/menu" element={admin(<MenuManager/>,['owner','manager'])}/>
-    <Route path="/admin/reviews" element={admin(<ReviewsAdmin/>,['owner','manager'])}/>
+    <Route path="/admin/reviews" element={admin(<ReviewsAdvancedPage/>,['owner','manager'])}/>
     <Route path="/admin/customers" element={admin(<CustomersPage/>,['owner','manager','cashier'])}/>
     <Route path="/admin/promotions" element={admin(<PromotionsPage/>,['owner','manager'])}/>
     <Route path="/admin/reports" element={admin(<ReportsPage/>,['owner','manager'])}/>
+    <Route path="/admin/ai-history" element={admin(<ChatHistoryPage/>,['owner','manager'])}/>
+    <Route path="/admin/knowledge" element={admin(<KnowledgeBasePage/>,['owner','manager'])}/>
     <Route path="/admin/staff" element={admin(<StaffPage/>,['owner'])}/>
     <Route path="/admin/audit" element={admin(<AuditPage/>,['owner'])}/>
     <Route path="/admin/settings" element={admin(<SettingsAdmin settings={settings} onChange={setSettings}/>,['owner','manager'])}/>
