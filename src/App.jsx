@@ -6,7 +6,7 @@ import {
   createServiceCall, getAdminSession, getCurrentProfile, getReservation, getSession, getSettings, listBills, listMenu,
   listOrders, listReservations, listReviews, listServiceCalls, listSessionOrders, listTables, login,
   logout, markTableReady, rejectReservation, requestBill, resolveServiceCall, shopIsOpen, submitReview,
-  subscribeAll, updateOrderStatus, updateSettings, expireReservations, updateReservationAdmin
+  subscribeAll, updateOrderStatus, updateSettings, expireReservations, updateReservationAdmin, cancelReservationAdmin
 } from './lib/api'
 import { MENU, ORDER_FLOW, ORDER_LABEL, SHOP, TABLE_LABEL } from './lib/constants'
 import { supabaseConfigured } from './lib/supabase'
@@ -324,7 +324,7 @@ function ReservationsAdmin(){
     })
     setEditItem(null);await load()
   }
-  async function cancelOne(r){if(!confirm('ยกเลิกการจองนี้?'))return;await updateReservationAdmin(r.id,{status:'cancelled'});await load()}
+  async function cancelOne(r){if(!confirm('ยกเลิกการจองนี้?'))return;try{await cancelReservationAdmin(r.id);await load()}catch(e){alert(e.message)}}
   const available=tables.filter(x=>x.status==='available')
   const qrUrl=qrItem?.session_token?`${window.location.origin}/shabu-aroi-jang/table/${qrItem.session_token}`:''
   return <>
