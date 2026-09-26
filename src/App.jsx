@@ -19,11 +19,18 @@ const money=(n)=>new Intl.NumberFormat('th-TH',{style:'currency',currency:'THB',
 const dateTime=(v)=>v?new Intl.DateTimeFormat('th-TH',{dateStyle:'short',timeStyle:'short'}).format(new Date(v)):'-'
 const t=(lang,th,en)=>lang==='th'?th:en
 
-function Logo({small=false}) {
-  const src=localStorage.getItem('shabu-logo-url')||'/shabu-aroi-jang/logo.svg'
-  return <img className={small?'logo small':'logo'} src={src} alt={SHOP.nameTh} />
+function Logo({small=false,hero=false}) {
+  const fallback=`${import.meta.env.BASE_URL}logo.svg`
+  const src=hero?`${import.meta.env.BASE_URL}logo-premium.webp`:(localStorage.getItem('shabu-logo-url')||fallback)
+  return <img className={hero?'logo hero-logo':small?'logo small':'logo'} src={src} alt={SHOP.nameTh} />
 }
 
+const CATEGORY_EN={
+  'ทั้งหมด':'All','หมู':'Pork','เนื้อ':'Beef','ไก่':'Chicken','ซีฟู้ด':'Seafood',
+  'ผัก':'Vegetables','เห็ด':'Mushrooms','เส้น':'Noodles','ของชาบู':'Shabu Items',
+  'ของทานเล่น':'Sides','น้ำซุป':'Soup','น้ำจิ้ม':'Sauce','เครื่องดื่ม':'Drinks','ของหวาน':'Dessert'
+}
+const categoryLabel=(lang,value)=>lang==='th'?value:(CATEGORY_EN[value]||value)
 function Status({value,type='order'}) {
   const labels=type==='table'?TABLE_LABEL:ORDER_LABEL
   return <span className={`status status-${value}`}>{labels[value]||value}</span>
@@ -31,8 +38,9 @@ function Status({value,type='order'}) {
 
 function CustomerShell({children,lang,setLang,settings}) {
   const open=shopIsOpen(settings)
-  return <div className="customer-shell">
-    {!supabaseConfigured && <div className="demo-bar">DEMO MODE • เชื่อม Supabase แล้วข้อมูลจะเป็น Realtime จริง</div>}
+  const address=t(lang,SHOP.addressTh,'125/3 Moo 5, Sam Khwai Phueak, Mueang Nakhon Pathom, Nakhon Pathom 73000')
+  return <div className="customer-shell premium-site">
+    {!supabaseConfigured && <div className="demo-bar">{t(lang,'DEMO MODE • เชื่อม Supabase แล้วข้อมูลจะเป็น Realtime จริง','DEMO MODE • Connect Supabase for live realtime data')}</div>}
     <header className="topbar">
       <div className="wrap topbar-inner">
         <Link className="brand" to="/"><Logo small/><div><strong>{lang==='th'?SHOP.nameTh:SHOP.nameEn}</strong><span>Japanese Shabu Buffet</span></div></Link>
@@ -40,22 +48,22 @@ function CustomerShell({children,lang,setLang,settings}) {
           <NavLink to="/">{t(lang,'หน้าแรก','Home')}</NavLink>
           <NavLink to="/menu">{t(lang,'เมนู','Menu')}</NavLink>
           <NavLink to="/reserve">{t(lang,'จองโต๊ะ','Reserve')}</NavLink>
-          <NavLink to="/reservation">{t(lang,'เช็กการจอง','Reservation')}</NavLink>
-          <NavLink to="/chat">AI Chat</NavLink>
+          <NavLink to="/reservation">{t(lang,'เช็กการจอง','My Booking')}</NavLink>
+          <NavLink to="/chat">{t(lang,'AI Chat','AI Chat')}</NavLink>
         </nav>
         <div className="top-actions">
-          <span className={open?'open-pill':'closed-pill'}>{open?'● เปิดร้าน':'● ปิดร้าน'}</span>
+          <span className={open?'open-pill':'closed-pill'}>{open?t(lang,'● เปิดร้าน','● Open'):t(lang,'● ปิดร้าน','● Closed')}</span>
           <button className="lang" onClick={()=>setLang(lang==='th'?'en':'th')}>{lang==='th'?'EN':'TH'}</button>
         </div>
       </div>
     </header>
-    {!open && <div className="closed-banner">ขณะนี้ร้านปิดรับลูกค้าใหม่ • ยังสามารถตรวจสอบการจองและพูดคุยกับ AI ได้</div>}
+    {!open && <div className="closed-banner">{t(lang,'ขณะนี้ร้านปิดรับลูกค้าใหม่ • ยังสามารถตรวจสอบการจองและพูดคุยกับ AI ได้','We are currently closed for new guests • You can still check bookings and chat with AI')}</div>}
     {children}
     <footer>
       <div className="wrap footer-grid">
-        <div><Logo small/><h3>{SHOP.nameTh}</h3><p>บุฟเฟ่ต์ชาบู 299 บาท รวมน้ำ NET • อิ่มคุ้มในนครปฐม</p></div>
-        <div><b>ติดต่อร้าน</b><p>{SHOP.phone}<br/>{SHOP.addressTh}</p></div>
-        <div><b>เวลาทำการ</b><p>{SHOP.openTime}–{SHOP.closeTime}<br/>เวลาทาน {SHOP.diningMinutes} นาที</p><Link className="footer-admin" to="/admin/login">Admin</Link></div>
+        <div><Logo small/><h3>{lang==='th'?SHOP.nameTh:SHOP.nameEn}</h3><p>{t(lang,'บุฟเฟ่ต์ชาบู 299 บาท รวมน้ำ NET • อิ่มคุ้มในนครปฐม','Shabu buffet ฿299, drinks included, NET • Nakhon Pathom')}</p></div>
+        <div><b>{t(lang,'ติดต่อร้าน','Contact')}</b><p>{SHOP.phone}<br/>{address}</p></div>
+        <div><b>{t(lang,'เวลาทำการ','Opening hours')}</b><p>{SHOP.openTime}–{SHOP.closeTime}<br/>{t(lang,`เวลาทาน ${SHOP.diningMinutes} นาที`,`${SHOP.diningMinutes}-minute dining time`)}</p><Link className="footer-admin" to="/admin/login">Admin</Link></div>
       </div>
     </footer>
   </div>
@@ -63,48 +71,69 @@ function CustomerShell({children,lang,setLang,settings}) {
 
 function Home({lang,settings}) {
   const open=shopIsOpen(settings)
+  const features=lang==='th'?[
+    ['🍲','ซุปหลากหลาย','น้ำดำ หม่าล่า ต้มยำ และอีกมาก'],
+    ['🥩','วัตถุดิบแน่น','หมู เนื้อ ซีฟู้ด และผักสด'],
+    ['📱','สั่งผ่าน QR','สั่งได้ทันทีจากโต๊ะ ไม่ต้องรอ'],
+    ['🔔','เรียกพนักงาน','เติมซุป เก็บจาน และเช็กบิลได้']
+  ]:[
+    ['🍲','Signature broths','Japanese, Mala, Tom Yum and more'],
+    ['🥩','Quality ingredients','Pork, beef, seafood and fresh vegetables'],
+    ['📱','Order by QR','Order instantly from your table'],
+    ['🔔','Call staff','Soup refill, table service and checkout']
+  ]
+  const steps=lang==='th'?[
+    ['1','จองโต๊ะ','เลือกวัน เวลา และจำนวนคน'],
+    ['2','ร้านยืนยัน','ทีมงานจัดโต๊ะที่เหมาะสมให้คุณ'],
+    ['3','รับ QR','สแกนเพื่อเปิดโต๊ะเมื่อมาถึงร้าน'],
+    ['4','อิ่มไม่อั้น','สั่งอาหารเข้าครัวแบบ Realtime']
+  ]:[
+    ['1','Reserve','Choose your date, time and party size'],
+    ['2','Get confirmed','Our team assigns the right table'],
+    ['3','Scan your QR','Activate your table when you arrive'],
+    ['4','Enjoy unlimited','Send orders to the kitchen in realtime']
+  ]
+  const address=t(lang,SHOP.addressTh,'125/3 Moo 5, Sam Khwai Phueak, Mueang Nakhon Pathom, Nakhon Pathom 73000')
   return <>
-    <section className="hero">
+    <section className="hero premium-hero">
+      <div className="hero-glow glow-one"></div><div className="hero-glow glow-two"></div>
       <div className="wrap hero-grid">
-        <div>
+        <div className="hero-copy">
           <span className="eyebrow">SHABU • NAKHON PATHOM</span>
-          <h1>{t(lang,'ชาบูร้อนๆ','Hot Pot Happiness')}<br/><em>{t(lang,'อร่อยไม่อั้น','Unlimited Goodness')}</em></h1>
-          <p>{t(lang,'บุฟเฟ่ต์ชาบูครบทั้งหมู เนื้อ ซีฟู้ด ผัก ของทอด เครื่องดื่ม และของหวาน ในราคาเดียว','Unlimited shabu with pork, beef, seafood, vegetables, sides, drinks and dessert — all in one price.')}</p>
-          <div className="hero-price"><strong>299</strong><span>บาท / คน<br/>รวมน้ำ + NET</span></div>
+          <div className="hero-kicker">{t(lang,'JAPANESE SHABU BUFFET','JAPANESE SHABU BUFFET')}</div>
+          <h1>{t(lang,'ชาบูร้อนๆ','Premium Shabu')}<br/><em>{t(lang,'อร่อยไม่อั้น','Unlimited Pleasure')}</em></h1>
+          <p>{t(lang,'บุฟเฟ่ต์ชาบูพรีเมียม ครบทั้งหมู เนื้อ ซีฟู้ด ผัก ของทอด เครื่องดื่ม และของหวาน จบในราคาเดียว','A premium all-you-can-eat shabu experience with pork, beef, seafood, vegetables, sides, drinks and dessert — all in one price.')}</p>
+          <div className="hero-price"><strong>299</strong><span>{t(lang,'บาท / คน','THB / person')}<br/>{t(lang,'รวมน้ำ + NET','Drinks included • NET')}</span></div>
           <div className="hero-actions">
             <Link className={open?'btn primary':'btn disabled'} to={open?'/reserve':'/'}>{t(lang,'จองโต๊ะ','Reserve a table')}</Link>
-            <Link className="btn ghost" to="/menu">{t(lang,'ดูเมนู','View menu')}</Link>
-            <Link className="btn dark" to="/chat">💬 AI Chat</Link>
+            <Link className="btn ghost" to="/menu">{t(lang,'ดูเมนู','Explore menu')}</Link>
+            <Link className="btn dark" to="/chat">✦ AI Concierge</Link>
           </div>
-          <div className="hero-badges"><span>⏱ {SHOP.diningMinutes} นาที</span><span>🥤 รวมน้ำ</span><span>💳 PromptPay</span></div>
+          <div className="hero-badges">
+            <span>⏱ {t(lang,`${SHOP.diningMinutes} นาที`,`${SHOP.diningMinutes} min`)}</span>
+            <span>🥤 {t(lang,'รวมเครื่องดื่ม','Drinks included')}</span>
+            <span>💳 PromptPay</span>
+          </div>
         </div>
-        <div className="hero-art">
-          <Logo/>
-          <div className="float-card one">🔥 5 น้ำซุป</div>
-          <div className="float-card two">🥩 70+ เมนู</div>
+        <div className="hero-art premium-logo-stage">
+          <div className="logo-halo"></div>
+          <Logo hero/>
+          <div className="float-card one">🔥 {t(lang,'5 น้ำซุป','5 broths')}</div>
+          <div className="float-card two">🥩 {t(lang,'70+ เมนู','70+ items')}</div>
+          <div className="premium-seal"><span>299</span><small>{t(lang,'NET / คน','NET / PERSON')}</small></div>
         </div>
       </div>
     </section>
     <section className="feature-band"><div className="wrap feature-grid">
-      {[
-        ['🍲','ซุปหลากหลาย','น้ำดำ หม่าล่า ต้มยำ และอีกมาก'],
-        ['🥩','วัตถุดิบแน่น','หมู เนื้อ ซีฟู้ด ผักสด'],
-        ['📱','สั่งผ่าน QR','ไม่ต้องรอพนักงานรับออเดอร์'],
-        ['🔔','เรียกพนักงาน','เติมซุป เก็บจาน เช็คบิลได้ทันที'],
-      ].map(([i,h,p])=><div className="feature-card" key={h}><span>{i}</span><div><b>{h}</b><small>{p}</small></div></div>)}
+      {features.map(([i,h,p])=><div className="feature-card" key={h}><span>{i}</span><div><b>{h}</b><small>{p}</small></div></div>)}
     </div></section>
-    <section className="section"><div className="wrap split">
-      <div className="panel warm"><span className="eyebrow">HOW IT WORKS</span><h2>จอง → QR → สั่ง → เช็คบิล</h2>
-        <div className="steps">{[
-          ['1','จองโต๊ะ','กรอกวัน เวลา และจำนวนคน'],
-          ['2','ร้านยืนยัน','Admin เลือกโต๊ะที่เหมาะสม'],
-          ['3','รับ QR','สแกนแล้วล็อกโต๊ะอัตโนมัติ'],
-          ['4','สั่งได้ไม่อั้น','Kitchen รับรายการแบบ Realtime'],
-        ].map(([n,h,p])=><div key={n}><i>{n}</i><span><b>{h}</b><small>{p}</small></span></div>)}</div>
+    <section className="section premium-section"><div className="wrap split">
+      <div className="panel warm"><span className="eyebrow">HOW IT WORKS</span><h2>{t(lang,'จองง่าย สั่งไว อิ่มแบบพรีเมียม','Simple booking. Seamless dining.')}</h2>
+        <div className="steps">{steps.map(([n,h,p])=><div key={n}><i>{n}</i><span><b>{h}</b><small>{p}</small></span></div>)}</div>
       </div>
-      <div className="panel map-card"><span className="eyebrow">LOCATION</span><h2>ร้านอยู่ที่ไหน?</h2><p>{SHOP.addressTh}</p>
-        <div className="fake-map"><div>📍</div><b>ชาบูอร่อยจัง</b><span>สามควายเผือก • เมืองนครปฐม</span></div>
-        <a className="btn primary wide" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(SHOP.addressTh)}`} target="_blank" rel="noreferrer">เปิด Google Maps</a>
+      <div className="panel map-card"><span className="eyebrow">LOCATION</span><h2>{t(lang,'พบกันที่นครปฐม','Visit us in Nakhon Pathom')}</h2><p>{address}</p>
+        <div className="fake-map"><div>◆</div><b>{lang==='th'?SHOP.nameTh:SHOP.nameEn}</b><span>{t(lang,'สามควายเผือก • เมืองนครปฐม','Sam Khwai Phueak • Mueang Nakhon Pathom')}</span></div>
+        <a className="btn primary wide" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(SHOP.addressTh)}`} target="_blank" rel="noreferrer">{t(lang,'เปิด Google Maps','Open Google Maps')}</a>
       </div>
     </div></section>
   </>
@@ -117,15 +146,15 @@ function MenuPage({lang}) {
   useEffect(()=>{listMenu().then(setItems).catch(()=>setItems(MENU))},[])
   const cats=['ทั้งหมด',...new Set(items.map(x=>x.category))]
   const filtered=items.filter(x=>(cat==='ทั้งหมด'||x.category===cat)&&(`${x.name_th} ${x.name_en}`.toLowerCase().includes(q.toLowerCase())))
-  return <section className="section page"><div className="wrap">
-    <div className="page-head center"><span className="eyebrow">BUFFET MENU</span><h1>{t(lang,'เมนูชาบูของเรา','Our Shabu Menu')}</h1><p>รวมอยู่ใน Buffet 299 บาท เว้นแต่ร้านกำหนดเป็นเมนูพิเศษในอนาคต</p></div>
-    <div className="menu-toolbar"><input value={q} onChange={e=>setQ(e.target.value)} placeholder={t(lang,'ค้นหาเมนู...','Search menu...')}/></div>
-    <div className="chips">{cats.map(c=><button key={c} className={cat===c?'active':''} onClick={()=>setCat(c)}>{c}</button>)}</div>
-    <div className="menu-grid">{filtered.map(x=><article className="food-card" key={x.id}><div className="food-emoji">{x.emoji||'🍲'}</div><div><small>{x.category}{x.is_premium?' • PREMIUM':''}</small><h3>{lang==='th'?x.name_th:x.name_en}</h3><span>{x.is_available!==false?'พร้อมเสิร์ฟ':'หมดชั่วคราว'}{Number(x.extra_price||0)>0?` • +${money(x.extra_price)}`:''}</span></div></article>)}</div>
+  return <section className="section page premium-page"><div className="wrap">
+    <div className="page-head center"><span className="eyebrow">BUFFET MENU</span><h1>{t(lang,'เมนูชาบูของเรา','Our Shabu Selection')}</h1><p>{t(lang,'เมนูส่วนใหญ่รวมในบุฟเฟ่ต์ 299 บาท เมนู Premium จะแสดงราคาเพิ่มอย่างชัดเจน','Most items are included in the ฿299 buffet. Premium add-ons are clearly marked with an extra price.')}</p></div>
+    <div className="menu-toolbar"><input value={q} onChange={e=>setQ(e.target.value)} placeholder={t(lang,'ค้นหาเมนู...','Search the menu...')}/></div>
+    <div className="chips">{cats.map(c=><button key={c} className={cat===c?'active':''} onClick={()=>setCat(c)}>{categoryLabel(lang,c)}</button>)}</div>
+    <div className="menu-grid">{filtered.map(x=><article className="food-card" key={x.id}><div className="food-emoji">{x.emoji||'🍲'}</div><div><small>{categoryLabel(lang,x.category)}{x.is_premium?' • PREMIUM':''}</small><h3>{lang==='th'?x.name_th:x.name_en}</h3><span>{x.is_available!==false?t(lang,'พร้อมเสิร์ฟ','Available'):t(lang,'หมดชั่วคราว','Temporarily unavailable')}{Number(x.extra_price||0)>0?` • +${money(x.extra_price)}`:''}</span></div></article>)}</div>
   </div></section>
 }
 
-function ReservePage({settings}) {
+function ReservePage({settings,lang}) {
   const nav=useNavigate(); const open=shopIsOpen(settings)
   const [form,setForm]=useState({customer_name:'',customer_phone:'',reservation_date:'',reservation_time:'18:00',guest_count:2,note:''})
   const [busy,setBusy]=useState(false); const [err,setErr]=useState('')
@@ -138,54 +167,57 @@ function ReservePage({settings}) {
       nav(`/reservation?code=${encodeURIComponent(r.code)}`)
     }catch(e2){setErr(e2.message)}finally{setBusy(false)}
   }
-  if(!open)return <section className="section page"><div className="wrap narrow"><div className="empty"><h2>ร้านปิดรับการจองชั่วคราว</h2><p>กรุณากลับมาในเวลาทำการ {SHOP.openTime}–{SHOP.closeTime}</p></div></div></section>
-  return <section className="section page"><div className="wrap narrow">
-    <div className="page-head"><span className="eyebrow">RESERVATION</span><h1>จองโต๊ะล่วงหน้า</h1><p>หลังส่งคำขอ ร้านจะเป็นผู้เลือกโต๊ะและยืนยันให้คุณ</p></div>
-    <form className="form-card" onSubmit={submit}>
+  if(!open)return <section className="section page premium-page"><div className="wrap narrow"><div className="empty"><h2>{t(lang,'ร้านปิดรับการจองชั่วคราว','Reservations are currently closed')}</h2><p>{t(lang,`กรุณากลับมาในเวลาทำการ ${SHOP.openTime}–${SHOP.closeTime}`,`Please return during opening hours ${SHOP.openTime}–${SHOP.closeTime}`)}</p></div></div></section>
+  return <section className="section page premium-page"><div className="wrap narrow">
+    <div className="page-head"><span className="eyebrow">RESERVATION</span><h1>{t(lang,'จองโต๊ะล่วงหน้า','Reserve your table')}</h1><p>{t(lang,'ส่งคำขอจอง แล้วทีมงานจะจัดโต๊ะที่เหมาะสมและยืนยันให้คุณ','Send your request and our team will assign the best available table and confirm it for you.')}</p></div>
+    <form className="form-card premium-form" onSubmit={submit}>
       {err&&<div className="alert error">{err}</div>}
       <div className="form-grid">
-        <label>ชื่อผู้จอง<input required value={form.customer_name} onChange={e=>set('customer_name',e.target.value)}/></label>
-        <label>เบอร์โทร<input required inputMode="tel" value={form.customer_phone} onChange={e=>set('customer_phone',e.target.value.replace(/\D/g,'').slice(0,10))}/></label>
-        <label>วันที่<input required type="date" value={form.reservation_date} onChange={e=>set('reservation_date',e.target.value)}/></label>
-        <label>เวลา<input required type="time" value={form.reservation_time} onChange={e=>set('reservation_time',e.target.value)}/></label>
-        <label>จำนวนคน<input min="1" max="10" required type="number" value={form.guest_count} onChange={e=>set('guest_count',e.target.value)}/></label>
-        <label>หมายเหตุ<input value={form.note} onChange={e=>set('note',e.target.value)} placeholder="เช่น มีเด็ก 1 คน"/></label>
+        <label>{t(lang,'ชื่อผู้จอง','Name')}<input required value={form.customer_name} onChange={e=>set('customer_name',e.target.value)}/></label>
+        <label>{t(lang,'เบอร์โทร','Phone')}<input required inputMode="tel" value={form.customer_phone} onChange={e=>set('customer_phone',e.target.value.replace(/\D/g,'').slice(0,10))}/></label>
+        <label>{t(lang,'วันที่','Date')}<input required type="date" value={form.reservation_date} onChange={e=>set('reservation_date',e.target.value)}/></label>
+        <label>{t(lang,'เวลา','Time')}<input required type="time" value={form.reservation_time} onChange={e=>set('reservation_time',e.target.value)}/></label>
+        <label>{t(lang,'จำนวนคน','Guests')}<input min="1" max="10" required type="number" value={form.guest_count} onChange={e=>set('guest_count',e.target.value)}/></label>
+        <label>{t(lang,'หมายเหตุ','Note')}<input value={form.note} onChange={e=>set('note',e.target.value)} placeholder={t(lang,'เช่น มีเด็ก 1 คน','e.g. 1 child')}/></label>
       </div>
-      <div className="price-preview"><span>ราคาโดยประมาณ</span><strong>{money(Number(form.guest_count||0)*299)}</strong><small>* ราคาเด็กสามารถปรับตอนเปิดโต๊ะจริงได้</small></div>
-      <button className="btn primary wide" disabled={busy}>{busy?'กำลังส่ง...':'ยืนยันคำขอจองโต๊ะ'}</button>
+      <div className="price-preview"><span>{t(lang,'ราคาโดยประมาณ','Estimated price')}</span><strong>{money(Number(form.guest_count||0)*299)}</strong><small>{t(lang,'* ราคาเด็กสามารถปรับตอนเปิดโต๊ะจริงได้','* Child pricing can be adjusted when the table session starts.')}</small></div>
+      <button className="btn primary wide" disabled={busy}>{busy?t(lang,'กำลังส่ง...','Submitting...'):t(lang,'ยืนยันคำขอจองโต๊ะ','Submit reservation request')}</button>
     </form>
   </div></section>
 }
 
-function ReservationPage() {
+function ReservationPage({lang}) {
   const loc=useLocation(); const params=new URLSearchParams(loc.search)
   const [code,setCode]=useState(params.get('code')||''); const [data,setData]=useState(null); const [err,setErr]=useState('')
-  async function search(c=code){setErr('');try{const r=await getReservation(c.trim());if(!r)throw new Error('ไม่พบการจอง');setData(r)}catch(e){setData(null);setErr(e.message)}}
+  async function search(c=code){setErr('');try{const r=await getReservation(c.trim());if(!r)throw new Error(t(lang,'ไม่พบการจอง','Reservation not found'));setData(r)}catch(e){setData(null);setErr(e.message)}}
   useEffect(()=>{if(code)search(code)},[])
-  return <section className="section page"><div className="wrap narrow">
-    <div className="page-head center"><span className="eyebrow">YOUR RESERVATION</span><h1>ตรวจสอบการจอง</h1><p>กรอกรหัสการจอง 6 ตัวที่ได้รับหลังส่งคำขอ</p></div>
-    <div className="search-box"><input value={code} onChange={e=>setCode(e.target.value.toUpperCase())} placeholder="ABC123" maxLength={10}/><button className="btn primary" onClick={()=>search()}>ค้นหา</button></div>
+  const stateLabels=lang==='th'?{pending:'รอยืนยัน',confirmed:'ยืนยันแล้ว',rejected:'ไม่อนุมัติ',cancelled:'ยกเลิก'}:{pending:'Pending',confirmed:'Confirmed',rejected:'Rejected',cancelled:'Cancelled'}
+  return <section className="section page premium-page"><div className="wrap narrow">
+    <div className="page-head center"><span className="eyebrow">YOUR RESERVATION</span><h1>{t(lang,'ตรวจสอบการจอง','Check your reservation')}</h1><p>{t(lang,'กรอกรหัสการจองที่ได้รับหลังส่งคำขอ','Enter the reservation code you received after submitting your request.')}</p></div>
+    <div className="search-box"><input value={code} onChange={e=>setCode(e.target.value.toUpperCase())} placeholder="ABC123" maxLength={10}/><button className="btn primary" onClick={()=>search()}>{t(lang,'ค้นหา','Search')}</button></div>
     {err&&<div className="alert error">{err}</div>}
     {data&&<div className="reservation-card">
-      <div className="reservation-top"><div><small>RESERVATION</small><h2>{data.code}</h2></div><span className={`reservation-state ${data.status}`}>{({pending:'รอยืนยัน',confirmed:'ยืนยันแล้ว',rejected:'ไม่อนุมัติ',cancelled:'ยกเลิก'})[data.status]||data.status}</span></div>
-      <div className="reservation-info"><div><span>ชื่อ</span><b>{data.customer_name}</b></div><div><span>จำนวน</span><b>{data.guest_count} คน</b></div><div><span>วัน/เวลา</span><b>{data.reservation_date} • {data.reservation_time}</b></div><div><span>โต๊ะ</span><b>{data.table_code||data.restaurant_tables?.code||'รอร้านจัดโต๊ะ'}</b></div></div>
-      {data.status==='confirmed'&&data.session_token&&<div className="qr-zone"><QRCodeSVG value={`${location.origin}/shabu-aroi-jang/table/${data.session_token}`} size={210}/><h3>QR สำหรับโต๊ะ {data.table_code||data.restaurant_tables?.code}</h3><p>สแกน QR เมื่อมาถึงร้านเพื่อเปิด Session และเริ่มสั่งอาหาร</p><Link className="btn dark" to={`/table/${data.session_token}`}>เปิดหน้าสั่งอาหาร</Link></div>}
+      <div className="reservation-top"><div><small>RESERVATION</small><h2>{data.code}</h2></div><span className={`reservation-state ${data.status}`}>{stateLabels[data.status]||data.status}</span></div>
+      <div className="reservation-info"><div><span>{t(lang,'ชื่อ','Name')}</span><b>{data.customer_name}</b></div><div><span>{t(lang,'จำนวน','Guests')}</span><b>{data.guest_count} {t(lang,'คน','people')}</b></div><div><span>{t(lang,'วัน/เวลา','Date / time')}</span><b>{data.reservation_date} • {data.reservation_time}</b></div><div><span>{t(lang,'โต๊ะ','Table')}</span><b>{data.table_code||data.restaurant_tables?.code||t(lang,'รอร้านจัดโต๊ะ','Awaiting table assignment')}</b></div></div>
+      {data.status==='confirmed'&&data.session_token&&<div className="qr-zone"><QRCodeSVG value={`${location.origin}/shabu-aroi-jang/table/${data.session_token}`} size={210}/><h3>{t(lang,`QR สำหรับโต๊ะ ${data.table_code||data.restaurant_tables?.code}`,`QR for table ${data.table_code||data.restaurant_tables?.code}`)}</h3><p>{t(lang,'สแกน QR เมื่อมาถึงร้านเพื่อเปิด Session และเริ่มสั่งอาหาร','Scan this QR when you arrive to activate your table session and start ordering.')}</p><Link className="btn dark" to={`/table/${data.session_token}`}>{t(lang,'เปิดหน้าสั่งอาหาร','Open ordering page')}</Link></div>}
     </div>}
   </div></section>
 }
 
-function ChatPage() {
-  const [messages,setMessages]=useState([{role:'bot',text:'สวัสดีครับ 👋 ผมเป็น AI ของชาบูอร่อยจัง ถามเรื่องราคา เมนู เวลาเปิด ที่ตั้ง หรือการจองได้เลยครับ'}])
+function ChatPage({lang}) {
+  const welcome=t(lang,'สวัสดีครับ 👋 ผมเป็น AI ของชาบูอร่อยจัง ถามเรื่องราคา เมนู เวลาเปิด ที่ตั้ง หรือการจองได้เลยครับ','Hello 👋 I’m the Shabu Aroi Jang AI concierge. Ask me about prices, menu, opening hours, location or reservations.')
+  const [messages,setMessages]=useState([{role:'bot',text:welcome}])
   const [input,setInput]=useState(''); const [busy,setBusy]=useState(false)
+  useEffect(()=>{setMessages([{role:'bot',text:welcome}])},[lang])
   async function send(){
     const q=input.trim(); if(!q||busy)return
     setInput(''); setMessages(m=>[...m,{role:'user',text:q}]); setBusy(true)
     const answer=await askAi(q); setMessages(m=>[...m,{role:'bot',text:answer}]); setBusy(false)
   }
-  return <section className="section page"><div className="wrap chat-wrap">
-    <div className="page-head center"><span className="eyebrow">AI CONCIERGE</span><h1>ถามชาบู AI</h1><p>ผู้ช่วยตอบคำถามเกี่ยวกับร้านตลอดเวลา</p></div>
-    <div className="chat-card"><div className="chat-log">{messages.map((m,i)=><div key={i} className={`bubble-msg ${m.role}`}><span>{m.role==='bot'?'🍲':'🙂'}</span><p>{m.text}</p></div>)}{busy&&<div className="bubble-msg bot"><span>🍲</span><p>กำลังคิด...</p></div>}</div>
-      <div className="chat-input"><input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} placeholder="เช่น ร้านเปิดกี่โมง?"/><button className="btn primary" onClick={send}>ส่ง</button></div>
+  return <section className="section page premium-page"><div className="wrap chat-wrap">
+    <div className="page-head center"><span className="eyebrow">AI CONCIERGE</span><h1>{t(lang,'ถามชาบู AI','Shabu AI Concierge')}</h1><p>{t(lang,'ผู้ช่วยตอบคำถามเกี่ยวกับร้านได้ตลอดเวลา','Your always-on assistant for restaurant questions.')}</p></div>
+    <div className="chat-card"><div className="chat-log">{messages.map((m,i)=><div key={i} className={`bubble-msg ${m.role}`}><span>{m.role==='bot'?'✦':'🙂'}</span><p>{m.text}</p></div>)}{busy&&<div className="bubble-msg bot"><span>✦</span><p>{t(lang,'กำลังคิด...','Thinking...')}</p></div>}</div>
+      <div className="chat-input"><input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} placeholder={t(lang,'เช่น ร้านเปิดกี่โมง?','e.g. What time do you open?')}/><button className="btn primary" onClick={send}>{t(lang,'ส่ง','Send')}</button></div>
     </div>
   </div></section>
 }
@@ -533,9 +565,9 @@ export default function App(){
   return <Routes>
     <Route path="/" element={<CustomerShell lang={lang} setLang={setLang} settings={settings}><Home lang={lang} settings={settings}/></CustomerShell>}/>
     <Route path="/menu" element={<CustomerShell lang={lang} setLang={setLang} settings={settings}><MenuPage lang={lang}/></CustomerShell>}/>
-    <Route path="/reserve" element={<CustomerShell lang={lang} setLang={setLang} settings={settings}><ReservePage settings={settings}/></CustomerShell>}/>
-    <Route path="/reservation" element={<CustomerShell lang={lang} setLang={setLang} settings={settings}><ReservationPage/></CustomerShell>}/>
-    <Route path="/chat" element={<CustomerShell lang={lang} setLang={setLang} settings={settings}><ChatPage/></CustomerShell>}/>
+    <Route path="/reserve" element={<CustomerShell lang={lang} setLang={setLang} settings={settings}><ReservePage settings={settings} lang={lang}/></CustomerShell>}/>
+    <Route path="/reservation" element={<CustomerShell lang={lang} setLang={setLang} settings={settings}><ReservationPage lang={lang}/></CustomerShell>}/>
+    <Route path="/chat" element={<CustomerShell lang={lang} setLang={setLang} settings={settings}><ChatPage lang={lang}/></CustomerShell>}/>
     <Route path="/table/:token" element={<TablePage/>}/>
     <Route path="/admin/login" element={adminSession?<Navigate to="/admin/dashboard" replace/>:<AdminLogin onLogin={onAdminLogin}/>}/>
     <Route path="/admin/dashboard" element={admin(<Dashboard/>,['owner','manager','cashier','kitchen','staff'])}/>
